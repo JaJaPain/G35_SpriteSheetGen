@@ -60,6 +60,16 @@ if not exist "frontend\node_modules" (
 echo [4/4] Starting Sprite Studio Servers...
 echo.
 
+:: Check and start Ollama in background
+ollama --version >nul 2>&1
+if %errorlevel% equ 0 (
+    echo   - Starting Ollama AI Service in background (Models: C:\AIModels)...
+    set OLLAMA_MODELS=C:\AIModels
+    start "Ollama Service" /Min cmd /c "ollama serve"
+) else (
+    echo   - [WARNING] Ollama is not installed or not in PATH. Quality Control verification will be disabled.
+)
+
 echo   - Starting FastAPI backend on http://127.0.0.1:8000
 start "Sprite Studio Backend" /Min cmd /c "backend\venv\Scripts\python.exe backend\app_server.py"
 
@@ -68,7 +78,7 @@ start "Sprite Studio Frontend" /Min cmd /c "cd /d frontend && npm run dev"
 
 echo.
 echo Waiting for servers to initialize...
-timeout /t 4 /nobreak >nul
+timeout /t 5 /nobreak >nul
 
 echo Opening browser...
 start http://localhost:5173/
