@@ -1,0 +1,82 @@
+[
+    {
+        "filename": "34back.png",
+        "processed_filename": "34back_bg.png",
+        "processed_path": "C:\\CodingProjects\\GeminiTestAnimationStudio\\ProcessedSprites\\with_bg\\34back_bg.png",
+        "dominant_color": [
+            76,
+            53,
+            45
+        ],
+        "background_name": "yellow",
+        "background_rgb": [
+            255,
+            255,
+            0
+        ]
+    },
+    {
+        "filename": "34front.png",
+        "processed_filename": "34front_bg.png",
+        "processed_path": "C:\\CodingProjects\\GeminiTestAnimationStudio\\ProcessedSprites\\with_bg\\34front_bg.png",
+        "dominant_color": [
+            87,
+            87,
+            79
+        ],
+        "background_name": "yellow",
+        "background_rgb": [
+            255,
+            255,
+            0
+        ]
+    },
+    {
+        "filename": "back.png",
+        "processed_filename": "back_bg.png",
+        "processed_path": "C:\\CodingProjects\\GeminiTestAnimationStudio\\ProcessedSprites\\with_bg\\back_bg.png",
+        "dominant_color": [
+            77,
+            52,
+            43
+        ],
+        "background_name": "yellow",
+        "background_rgb": [
+            255,
+            255,
+            0
+        ]
+    },
+    {
+        "filename": "front.png",
+        "processed_filename": "front_bg.png",
+        "processed_path": "C:\\CodingProjects\\GeminiTestAnimationStudio\\ProcessedSprites\\with_bg\\front_bg.png",
+        "dominant_color": [
+            83,
+            85,
+            77
+        ],
+        "background_name": "yellow",
+        "background_rgb": [
+            255,
+            255,
+            0
+        ]
+    },
+    {
+        "filename": "SideFacingLeft.png",
+        "processed_filename": "SideFacingLeft_bg.png",
+        "processed_path": "C:\\CodingProjects\\GeminiTestAnimationStudio\\ProcessedSprites\\with_bg\\SideFacingLeft_bg.png",
+        "dominant_color": [
+            74,
+            52,
+            44
+        ],
+        "background_name": "yellow",
+        "background_rgb": [
+            255,
+            255,
+            0
+        ]
+    }
+]

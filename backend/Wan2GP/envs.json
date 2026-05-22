@@ -1,0 +1,9 @@
+{
+    "active": "env_venv",
+    "envs": {
+        "env_venv": {
+            "type": "venv",
+            "path": ".\\env_venv"
+        }
+    }
+}

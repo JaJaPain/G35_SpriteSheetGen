@@ -1,0 +1,64 @@
+# Python virtual environment
+backend/venv/
+venv/
+env_venv/
+**/env_venv/
+**/*venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Checkpoints, weights, binaries, and executables
+**/ckpts/
+**/finetunes/
+**/ffmpeg_bins/
+*.safetensors
+*.onnx
+*.ckpt
+*.pth
+*.bin
+*.pt
+*.exe
+*.dll
+*.lib
+*.so
+*.dylib
+*.node
+
+# Node dependencies and build files
+node_modules/
+frontend/node_modules/
+frontend/dist/
+dist/
+
+# IDE files
+.vscode/
+.idea/
+.DS_Store
+
+# User generated files / zip archives
+*.zip
+*.avi
+
+# Ignore all videos and images by default
+*.mp4
+*.png
+*.gif
+*.webm
+*.jpg
+*.jpeg
+*.bmp
+*.tiff
+
+# Allow specific essential frontend asset images so UI builds properly
+!frontend/src/assets/*.png
+!frontend/src/assets/*.svg
+!frontend/src/assets/*.jpg
+!frontend/src/assets/*.jpeg
+
+# Generated asset folders
+ProcessedSprites/videos/
+ProcessedSprites/frames/
+ProcessedSprites/exports/
+ProcessedSprites/with_bg/
