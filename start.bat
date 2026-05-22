@@ -78,7 +78,7 @@ start "Sprite Studio Frontend" /Min cmd /c "cd /d frontend && npm run dev"
 
 echo.
 echo Waiting for servers to initialize...
-timeout /t 5 /nobreak >nul
+powershell -Command "for ($i=0; $i -lt 30; $i++) { $c = New-Object System.Net.Sockets.TcpClient; try { $c.Connect('localhost', 5173); if ($c.Connected) { $c.Close(); break } } catch {} $c.Close(); Start-Sleep -Seconds 1 }"
 
 echo Opening browser...
 start http://localhost:5173/
