@@ -228,14 +228,14 @@ export default function App() {
                         null;
   const selectedSprite = selectedSpriteRaw ? {
     ...selectedSpriteRaw,
-    seed: activeAttempt?.seed ?? selectedSpriteRaw.seed,
-    status: activeAttempt?.status ?? selectedSpriteRaw.status,
-    video_path: activeAttempt?.video_path ?? selectedSpriteRaw.video_path,
-    frames_dir: activeAttempt?.frames_dir ?? selectedSpriteRaw.frames_dir,
+    seed: activeAttempt ? activeAttempt.seed : selectedSpriteRaw.seed,
+    status: activeAttempt ? activeAttempt.status : selectedSpriteRaw.status,
+    video_path: activeAttempt ? activeAttempt.video_path : selectedSpriteRaw.video_path,
+    frames_dir: activeAttempt ? activeAttempt.frames_dir : selectedSpriteRaw.frames_dir,
     verification: activeAttempt ? activeAttempt.verification : selectedSpriteRaw.verification,
-    has_frames: activeAttempt?.has_frames ?? selectedSpriteRaw.has_frames,
-    frames: activeAttempt?.frames ?? selectedSpriteRaw.frames,
-    offsets: activeAttempt?.offsets ?? selectedSpriteRaw.offsets
+    has_frames: activeAttempt ? activeAttempt.has_frames : selectedSpriteRaw.has_frames,
+    frames: activeAttempt ? activeAttempt.frames : selectedSpriteRaw.frames,
+    offsets: activeAttempt ? activeAttempt.offsets : selectedSpriteRaw.offsets
   } : null;
 
   const handleFrameUpdate = (index: number, _dataUrl: string) => {
@@ -903,7 +903,17 @@ export default function App() {
               </div>
               {isQcExpanded && (
                 <div className="overflow-y-auto flex flex-col gap-2 flex-1 pt-1">
-                  {selectedSprite.verification ? (
+                  {selectedSprite.status === 'pending' ? (
+                    <div className="text-xs text-white/30 italic flex items-center gap-1.5">
+                      <Loader2 size={12} className={pipelineStatus === 'running' ? 'animate-spin' : ''} />
+                      {pipelineStatus === 'running' ? 'Generating walk cycle...' : 'Awaiting generation...'}
+                    </div>
+                  ) : selectedSprite.status === 'generated' ? (
+                    <div className="text-xs text-white/30 italic flex items-center gap-1.5">
+                      <Loader2 size={12} className="animate-spin" />
+                      Awaiting QC verification report...
+                    </div>
+                  ) : selectedSprite.verification ? (
                     <div className="text-xs flex flex-col gap-1.5">
                       <div className="text-white/80 font-medium">
                         {selectedSprite.verification.passed ? '✅ Passed QC checks' : '❌ Failed QC checks'}
@@ -976,9 +986,19 @@ export default function App() {
                       <Loader2 size={32} />
                     </div>
                     <div className="flex flex-col gap-1.5 max-w-md">
-                      <h3 className="text-base font-semibold text-white/95">No Walk Cycle Frames Available</h3>
+                      <h3 className="text-base font-semibold text-white/95">
+                        {selectedSprite.status === 'pending'
+                          ? pipelineStatus === 'running'
+                            ? 'Generation in Progress'
+                            : 'Generation Pending'
+                          : 'No Walk Cycle Frames Available'}
+                      </h3>
                       <p className="text-xs text-white/40 leading-relaxed">
-                        This direction is currently {selectedSprite.status}. Run the Generator Pipeline to create a walk cycle video and extract its frames.
+                        {selectedSprite.status === 'pending'
+                          ? pipelineStatus === 'running'
+                            ? 'The AI pipeline is currently generating this walk cycle attempt. Please wait a moment...'
+                            : 'This candidate is queued for generation. Start the generation pipeline to process it.'
+                          : `This direction is currently ${selectedSprite.status}. Run the Generator Pipeline to create a walk cycle video and extract its frames.`}
                       </p>
                     </div>
                     {selectedSprite.status === 'pending' && pipelineStatus !== 'running' && (
