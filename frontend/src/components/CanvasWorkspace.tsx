@@ -12,6 +12,7 @@ interface CanvasWorkspaceProps {
   frames: string[];
   offsets: OffsetItem[];
   spriteId: string;
+  framesDir?: string;
   activeTool: 'brush' | 'eraser' | 'wand' | 'select' | 'pan';
   brushSize: number;
   brushColor: string;
@@ -28,6 +29,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
   frames,
   offsets,
   spriteId,
+  framesDir,
   activeTool,
   brushSize,
   brushColor,
@@ -70,7 +72,20 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
       const img = new Image();
       // Ensure cross-origin is handled if API is on another port
       img.crossOrigin = "anonymous";
-      img.src = `http://localhost:8000/frames/${spriteId}/${frameFile}?t=${Date.now()}`;
+      
+      let src = '';
+      if (framesDir) {
+        if (framesDir.startsWith('projects/')) {
+          src = `http://localhost:8000/${framesDir}/${frameFile}?t=${Date.now()}`;
+        } else {
+          const cleanPath = framesDir.replace('ProcessedSprites/frames/', '');
+          src = `http://localhost:8000/frames/${cleanPath}/${frameFile}?t=${Date.now()}`;
+        }
+      } else {
+        src = `http://localhost:8000/frames/${spriteId}/${frameFile}?t=${Date.now()}`;
+      }
+      
+      img.src = src;
       img.onload = () => {
         newCache[frameFile] = img;
         loadedCount++;
@@ -79,7 +94,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
         }
       };
     });
-  }, [frames, spriteId]);
+  }, [frames, spriteId, framesDir]);
 
   // Redraw canvas whenever frame, offsets, loaded images, zoom, or onion skins change
   useEffect(() => {

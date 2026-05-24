@@ -144,42 +144,42 @@ button:active {
   transform: translateY(0);
 }
 
-button.btn-primary {
+.btn-primary {
   background: var(--primary);
   border-color: var(--primary);
   color: white;
   box-shadow: 0 0 12px var(--primary-glow);
 }
 
-button.btn-primary:hover {
+.btn-primary:hover {
   background: var(--primary-hover);
   border-color: var(--primary-hover);
   box-shadow: 0 0 20px var(--primary-glow);
 }
 
-button.btn-success {
+.btn-success {
   background: rgba(16, 185, 129, 0.2);
   border-color: rgba(16, 185, 129, 0.3);
   color: #34d399;
 }
 
-button.btn-success:hover {
+.btn-success:hover {
   background: rgba(16, 185, 129, 0.3);
   border-color: rgba(16, 185, 129, 0.5);
 }
 
-button.btn-danger {
+.btn-danger {
   background: rgba(244, 63, 94, 0.2);
   border-color: rgba(244, 63, 94, 0.3);
   color: #fda4af;
 }
 
-button.btn-danger:hover {
+.btn-danger:hover {
   background: rgba(244, 63, 94, 0.3);
   border-color: rgba(244, 63, 94, 0.5);
 }
 
-button.btn-icon {
+.btn-icon {
   padding: 8px;
   border-radius: 8px;
   width: 36px;
@@ -642,4 +642,49 @@ input[type="range"]::-webkit-slider-thumb:hover {
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: .5; }
+}
+
+/* Modal and Switcher Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(4, 6, 11, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.p-6 {
+  padding: 24px;
+}
+
+.p-2\.5 {
+  padding: 10px;
+}
+
+.py-2\.5 {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.max-w-sm {
+  max-width: 384px;
+}
+
+.max-w-lg {
+  max-width: 512px;
+}
+
+.max-h-\[160px\] {
+  max-height: 160px;
+}
+
+.project-modal-shadow {
+  box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
 }

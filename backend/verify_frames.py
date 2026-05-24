@@ -4,6 +4,8 @@ import json
 import cv2
 import base64
 import requests
+import argparse
+import shutil
 
 try:
     sys.stdout.reconfigure(encoding='utf-8')
@@ -142,23 +144,45 @@ def verify_with_gemma(frame_paths):
     except Exception as e:
         return {"passed": False, "analysis": f"Comparison error: {e}"}
 
-def run_verification():
-    if not os.path.exists(LOG_PATH):
-        print(f"No generation log found at {LOG_PATH}")
+def determine_direction(filename):
+    filename_lower = filename.lower()
+    if "34front" in filename_lower:
+        return "34front"
+    elif "34back" in filename_lower:
+        return "34back"
+    elif "front" in filename_lower:
+        return "front"
+    elif "back" in filename_lower:
+        return "back"
+    elif "side" in filename_lower:
+        return "side"
+    return "front"
+
+def run_verification(project=None, force_verify=False):
+    if project:
+        project_dir = os.path.join(WORKSPACE_DIR, "projects", project)
+        log_path = os.path.join(project_dir, "generation_log.json")
+        videos_dir = os.path.join(project_dir, "videos")
+        temp_frames_dir = os.path.join(project_dir, "temp_frames")
+    else:
+        project_dir = None
+        log_path = os.path.join(WORKSPACE_DIR, "ProcessedSprites", "generation_log.json")
+        videos_dir = os.path.join(WORKSPACE_DIR, "ProcessedSprites", "videos")
+        temp_frames_dir = os.path.join(WORKSPACE_DIR, "ProcessedSprites", "frames")
+
+    if not os.path.exists(log_path):
+        print(f"No generation log found at {log_path}")
         return
         
-    with open(LOG_PATH, 'r') as f:
+    with open(log_path, 'r') as f:
         log_data = json.load(f)
         
     # Scan videos folder for generated videos
-    if not os.path.exists(OUTPUT_VIDEO_DIR):
-        print(f"Videos directory {OUTPUT_VIDEO_DIR} does not exist.")
-        return
-        
-    video_files = [f for f in os.listdir(OUTPUT_VIDEO_DIR) if f.lower().endswith('.mp4')]
-    print(f"Found {len(video_files)} video files in {OUTPUT_VIDEO_DIR}.")
+    video_files = []
+    if os.path.exists(videos_dir):
+        video_files = [f for f in os.listdir(videos_dir) if f.lower().endswith('.mp4')]
+    print(f"Found {len(video_files)} video files in {videos_dir}.")
     
-    force_verify = "--force" in sys.argv or "-f" in sys.argv
     updated_log = []
     
     for item in log_data:
@@ -166,27 +190,11 @@ def run_verification():
         filename = item["filename"]
         sprite_name = os.path.splitext(filename)[0]
         
-        # Find video file matching seed
-        matching_video = None
-        for v in video_files:
-            if f"seed{seed}" in v or f"_{seed}_" in v or v.endswith(f"_{seed}.mp4"):
-                matching_video = v
-                break
-                
-        if not matching_video:
-            print(f"Could not find matching video for {filename} (Seed: {seed})")
-            updated_log.append(item)
-            continue
-            
-        video_path = os.path.join(OUTPUT_VIDEO_DIR, matching_video)
-        item["video_path"] = video_path
-        
-        # Extract frames (always do this if they don't exist yet)
-        sprite_frames_dir = os.path.join(FRAMES_DIR, sprite_name)
-        
         # Check if we can skip verification
         status = item.get("status", "pending")
-        verification = item.get("verification", {})
+        verification = item.get("verification")
+        if not isinstance(verification, dict):
+            verification = {}
         has_passed = verification.get("passed", False)
         analysis = verification.get("analysis", "")
         
@@ -207,19 +215,47 @@ def run_verification():
                 print(f"Re-verifying {filename}: Duration is too short ({existing_duration:.2f}s) for new 3s qualification.")
             
         if not force_verify and status == "failed_verification" and not is_conn_error:
-            # If it failed for a reason other than duration, and duration is already too short, keep it failed
-            if existing_duration > 0 and existing_duration < 3.0:
-                print(f"Skipping {filename}: Already failed verification and is too short.")
-                updated_log.append(item)
-                continue
+            print(f"Skipping {filename} (Seed: {seed}): Already failed verification.")
+            updated_log.append(item)
+            continue
+            
+        # Find video path
+        matching_video = None
+        # First check in videos directory
+        for v in video_files:
+            if f"seed{seed}" in v or f"_{seed}_" in v or v.endswith(f"_{seed}.mp4"):
+                matching_video = os.path.join(videos_dir, v)
+                break
+                
+        # If not in videos directory, check the video_path in log
+        if not matching_video and item.get("video_path"):
+            stored_path = item.get("video_path")
+            if not os.path.isabs(stored_path):
+                temp_p = os.path.join(WORKSPACE_DIR, stored_path)
+                if os.path.exists(temp_p):
+                    matching_video = temp_p
+            elif os.path.exists(stored_path):
+                matching_video = stored_path
+
+        if not matching_video:
+            print(f"Could not find matching video for {filename} (Seed: {seed})")
+            updated_log.append(item)
+            continue
             
         print(f"Processing verification for {filename} (status: {status}, seed: {seed})...")
-        frame_count, fps = extract_frames_from_video(video_path, sprite_frames_dir)
+        
+        # Decide frame extraction directory
+        if project:
+            os.makedirs(temp_frames_dir, exist_ok=True)
+            extraction_dir = os.path.join(temp_frames_dir, f"{sprite_name}_seed{seed}")
+        else:
+            extraction_dir = os.path.join(temp_frames_dir, sprite_name)
+            
+        frame_count, fps = extract_frames_from_video(matching_video, extraction_dir)
         item["frame_count"] = frame_count
         item["fps"] = fps
         duration = frame_count / fps if fps > 0 else 0.0
         item["duration"] = duration
-        item["frames_dir"] = sprite_frames_dir
         
         if frame_count > 0:
             if duration < 3.0:
@@ -233,22 +269,84 @@ def run_verification():
             else:
                 # Pick 4 key frames (start, 1/3, 2/3, end)
                 indices = [0, frame_count // 3, (2 * frame_count) // 3, frame_count - 1]
-                key_frames = [os.path.join(sprite_frames_dir, f"frame_{idx:03d}.png") for idx in indices]
+                key_frames = [os.path.join(extraction_dir, f"frame_{idx:03d}.png") for idx in indices]
                 
                 # Verify with Gemma 4
                 verification_result = verify_with_gemma(key_frames)
                 item["verification"] = verification_result
                 item["status"] = "verified" if verification_result.get("passed", False) else "failed_verification"
+                
+            # Save verification.json in the extraction directory for local record
+            try:
+                with open(os.path.join(extraction_dir, "verification.json"), "w") as vf:
+                    json.dump(item["verification"], vf, indent=4)
+            except Exception as e:
+                print(f"  Warning: could not write verification.json: {e}")
+
+            # If project, sort the video and frame directories based on verdict
+            if project:
+                passed = item["verification"].get("passed", False)
+                direction = determine_direction(filename)
+                
+                if passed:
+                    dest_dir = os.path.join(project_dir, direction)
+                    final_video_path = os.path.join(dest_dir, f"{sprite_name}_seed{seed}.mp4")
+                    final_frames_dir = os.path.join(dest_dir, f"{sprite_name}_seed{seed}")
+                else:
+                    dest_dir = os.path.join(project_dir, "rejected")
+                    final_video_path = os.path.join(dest_dir, f"{sprite_name}_seed{seed}_failed.mp4")
+                    final_frames_dir = os.path.join(dest_dir, f"{sprite_name}_seed{seed}_failed")
+                
+                os.makedirs(dest_dir, exist_ok=True)
+                
+                # Move video if it's currently in the raw videos directory (not already sorted)
+                if os.path.dirname(matching_video) == os.path.abspath(videos_dir):
+                    print(f"  Moving video to {final_video_path}...")
+                    if os.path.exists(final_video_path):
+                        os.remove(final_video_path)
+                    shutil.move(matching_video, final_video_path)
+                else:
+                    # If it was already in a sorted location (e.g. failed in previous run) but now passes/re-fails
+                    if os.path.abspath(matching_video) != os.path.abspath(final_video_path):
+                        print(f"  Moving video from sorted location to {final_video_path}...")
+                        if os.path.exists(final_video_path):
+                            os.remove(final_video_path)
+                        shutil.move(matching_video, final_video_path)
+                
+                # Move frames
+                print(f"  Moving frames to {final_frames_dir}...")
+                if os.path.exists(final_frames_dir):
+                    shutil.rmtree(final_frames_dir)
+                shutil.move(extraction_dir, final_frames_dir)
+                
+                # Update paths to relative for portability
+                item["video_path"] = os.path.relpath(final_video_path, WORKSPACE_DIR).replace("\\", "/")
+                item["frames_dir"] = os.path.relpath(final_frames_dir, WORKSPACE_DIR).replace("\\", "/")
+            else:
+                item["video_path"] = os.path.relpath(matching_video, WORKSPACE_DIR).replace("\\", "/")
+                item["frames_dir"] = os.path.relpath(extraction_dir, WORKSPACE_DIR).replace("\\", "/")
         else:
             item["status"] = "failed_frame_extraction"
             item["verification"] = {"passed": False, "analysis": "Zero frames extracted."}
+            item["video_path"] = os.path.relpath(matching_video, WORKSPACE_DIR).replace("\\", "/")
+            item["frames_dir"] = os.path.relpath(extraction_dir, WORKSPACE_DIR).replace("\\", "/")
             
         updated_log.append(item)
         
-    with open(LOG_PATH, 'w') as f:
+    with open(log_path, 'w') as f:
         json.dump(updated_log, f, indent=4)
         
     print("Verification completed and log updated.")
 
 if __name__ == "__main__":
-    run_verification()
+    parser = argparse.ArgumentParser(description="Verify generated walk cycle videos using Gemma 4")
+    parser.add_argument("--project", "-p", type=str, default="default_project", help="Project name")
+    parser.add_argument("--force", "-f", action="store_true", help="Force verification")
+    args = parser.parse_args()
+    
+    project = args.project
+    if project == "None" or project == "none":
+        project = None
+        
+    run_verification(project=project, force_verify=args.force)
+

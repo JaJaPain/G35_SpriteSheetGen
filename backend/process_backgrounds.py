@@ -1,5 +1,6 @@
 import os
 import sys
+import argparse
 import numpy as np
 from PIL import Image
 
@@ -146,9 +147,24 @@ def process_sprite(src_path, dest_dir, autocrop=True):
     }
 
 def main():
+    parser = argparse.ArgumentParser(description="Process sprites background color")
+    parser.add_argument("--project", "-p", type=str, default="default_project", help="Project name")
+    args = parser.parse_args()
+
+    project = args.project
+    if project == "None" or project == "none":
+        project = None
+
     workspace = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    sprites_dir = os.path.join(workspace, "TestSprites")
-    output_dir = os.path.join(workspace, "ProcessedSprites", "with_bg")
+    if project:
+        project_dir = os.path.join(workspace, "projects", project)
+        sprites_dir = os.path.join(project_dir, "source")
+        output_dir = os.path.join(project_dir, "processed")
+        log_dir = project_dir
+    else:
+        sprites_dir = os.path.join(workspace, "TestSprites")
+        output_dir = os.path.join(workspace, "ProcessedSprites", "with_bg")
+        log_dir = os.path.join(workspace, "ProcessedSprites")
     
     if not os.path.exists(sprites_dir):
         print(f"Error: Sprites directory not found at {sprites_dir}")
@@ -162,7 +178,6 @@ def main():
             results.append(res)
             
     import json
-    log_dir = os.path.join(workspace, "ProcessedSprites")
     os.makedirs(log_dir, exist_ok=True)
     log_path = os.path.join(log_dir, "processing_log.json")
     with open(log_path, 'w') as f:

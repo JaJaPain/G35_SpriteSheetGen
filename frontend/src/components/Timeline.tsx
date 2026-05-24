@@ -5,6 +5,7 @@ interface TimelineProps {
   frames: string[];
   currentFrameIndex: number;
   spriteId: string;
+  framesDir?: string;
   isPlaying: boolean;
   fps: number;
   onionSkinPrev: boolean;
@@ -22,6 +23,7 @@ export const Timeline: React.FC<TimelineProps> = ({
   frames,
   currentFrameIndex,
   spriteId,
+  framesDir,
   isPlaying,
   fps,
   onionSkinPrev,
@@ -179,7 +181,13 @@ export const Timeline: React.FC<TimelineProps> = ({
                 
                 {/* Frame thumbnail image */}
                 <img 
-                  src={`http://localhost:8000/frames/${spriteId}/${frameFile}`}
+                  src={
+                    framesDir
+                      ? framesDir.startsWith('projects/')
+                        ? `http://localhost:8000/${framesDir}/${frameFile}`
+                        : `http://localhost:8000/frames/${framesDir.replace('ProcessedSprites/frames/', '')}/${frameFile}`
+                      : `http://localhost:8000/frames/${spriteId}/${frameFile}`
+                  }
                   alt={`Frame ${index}`}
                   className="object-contain max-w-full max-h-full opacity-80"
                   loading="lazy"
