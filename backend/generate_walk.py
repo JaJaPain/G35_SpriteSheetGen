@@ -155,29 +155,49 @@ def generate_walk_cycle_videos(project=None, dry_run=False, force_all=False, mod
         global_seeds = global_seeds_meta.get(direction, [])
         project_rejected = project_seeds_meta.get("rejected_seeds", {}).get(filename, [])
         
-        # Generate new seeds using good seeds first, avoiding rejected seeds
-        new_seeds = []
-        
-        # Try to pull from global good seeds first
-        for g_seed in global_seeds:
-            if len(new_seeds) >= new_candidates_needed:
-                break
-            if g_seed not in used_seeds and g_seed not in project_rejected:
-                print(f"  Using global good seed: {g_seed}")
-                new_seeds.append(g_seed)
-                used_seeds.add(g_seed)
-                
-        # Fill remaining with random seeds
-        while len(new_seeds) < new_candidates_needed:
-            r_seed = random.randint(100000, 999999)
-            if r_seed not in used_seeds and r_seed not in project_rejected:
-                new_seeds.append(r_seed)
-                used_seeds.add(r_seed)
-                
-        # Create tasks for the new seeds
         is_34 = "34front" in filename or "34back" in filename
         motion_amp = 1.2 if is_34 else 1.3
+
+        # Identify existing pending attempts and add them to tasks first
+        pending_attempts = [att for att in attempts if att.get("status") == "pending"]
+        pending_to_process = pending_attempts[:new_candidates_needed]
         
+        for att in pending_to_process:
+            print(f"  Resuming pending seed: {att['seed']}")
+            task = {
+                "model_type": "i2v",
+                "prompt": prompt,
+                "image_start": sprite_path,
+                "seed": att["seed"],
+                "video_length": 49,
+                "resolution": "832x480",
+                "num_inference_steps": 30,
+                "motion_amplitude": motion_amp
+            }
+            tasks.append(task)
+            
+        remaining_needed = new_candidates_needed - len(pending_to_process)
+        
+        # Generate new seeds using good seeds first, avoiding rejected seeds
+        new_seeds = []
+        if remaining_needed > 0:
+            # Try to pull from global good seeds first
+            for g_seed in global_seeds:
+                if len(new_seeds) >= remaining_needed:
+                    break
+                if g_seed not in used_seeds and g_seed not in project_rejected:
+                    print(f"  Using global good seed: {g_seed}")
+                    new_seeds.append(g_seed)
+                    used_seeds.add(g_seed)
+                    
+            # Fill remaining with random seeds
+            while len(new_seeds) < remaining_needed:
+                r_seed = random.randint(100000, 999999)
+                if r_seed not in used_seeds and r_seed not in project_rejected:
+                    new_seeds.append(r_seed)
+                    used_seeds.add(r_seed)
+                    
+        # Create tasks for the new seeds
         for seed in new_seeds:
             task = {
                 "model_type": "i2v",
