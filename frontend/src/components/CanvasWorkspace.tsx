@@ -83,10 +83,10 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
   const [rev, setRev] = useState<number>(0);
   const keyedCacheRef = useRef<Dict<HTMLCanvasElement>>({});
   
-  // Clear cache when sprite, directory, tolerance, or color changes
+  // Clear cache when sprite, directory, tolerance, color, or offsets change
   useEffect(() => {
     keyedCacheRef.current = {};
-  }, [spriteId, framesDir, chromaKeyColor, chromaKeyTolerance]);
+  }, [spriteId, framesDir, chromaKeyColor, chromaKeyTolerance, offsets]);
 
   const getKeyedCanvas = (frameFile: string, img: HTMLImageElement, frameIndex: number): HTMLCanvasElement | HTMLImageElement => {
     if (!previewChromaKey) return img;
