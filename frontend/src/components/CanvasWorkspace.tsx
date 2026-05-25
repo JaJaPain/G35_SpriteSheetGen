@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { ZoomIn, ZoomOut, Maximize } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize, Undo2, Redo2, Move, Eraser, Edit, Wand2, Grid } from 'lucide-react';
 
 interface OffsetItem {
   frameIndex: number;
@@ -16,12 +16,16 @@ interface CanvasWorkspaceProps {
   spriteId: string;
   framesDir?: string;
   activeTool: 'brush' | 'eraser' | 'wand' | 'select' | 'pan';
+  setActiveTool: (tool: 'brush' | 'eraser' | 'wand' | 'select' | 'pan') => void;
   brushSize: number;
+  setBrushSize: (size: number) => void;
   brushColor: string;
+  setBrushColor: (color: string) => void;
   onionSkinPrev: boolean;
   onionSkinNext: boolean;
   onionSkinOpacity: number;
   wandTolerance: number;
+  setWandTolerance: (tolerance: number) => void;
   onFrameUpdate: (frameIndex: number, dataUrl: string) => void;
   onOffsetChange: (frameIndex: number, dx: number, dy: number) => void;
   previewChromaKey?: boolean;
@@ -36,12 +40,16 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
   spriteId,
   framesDir,
   activeTool,
+  setActiveTool,
   brushSize,
+  setBrushSize,
   brushColor,
+  setBrushColor,
   onionSkinPrev,
   onionSkinNext,
   onionSkinOpacity,
   wandTolerance,
+  setWandTolerance,
   onFrameUpdate,
   onOffsetChange,
   previewChromaKey = false,
@@ -66,6 +74,10 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
   
   // Loaded images cache
   const [loadedImages, setLoadedImages] = useState<Dict<HTMLImageElement>>({});
+  
+  // History stack for Undo/Redo
+  const [history, setHistory] = useState<Dict<string[]>>({});
+  const [historyIndex, setHistoryIndex] = useState<Dict<number>>({});
   
   // Real-time chroma keying cache and revision
   const [rev, setRev] = useState<number>(0);
@@ -170,6 +182,98 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
 
     keyedCacheRef.current[cacheKey] = offscreen;
     return offscreen;
+  };
+  
+  const currentFrameFile = frames[currentFrameIndex] || '';
+
+  const pushHistory = (frameFile: string, dataUrl: string) => {
+    setHistory(prev => {
+      const stack = prev[frameFile] ? [...prev[frameFile]] : [];
+      const currentIdx = historyIndex[frameFile] !== undefined ? historyIndex[frameFile] : -1;
+      const newStack = stack.slice(0, currentIdx + 1);
+      newStack.push(dataUrl);
+      return {
+        ...prev,
+        [frameFile]: newStack
+      };
+    });
+    setHistoryIndex(prev => {
+      const currentIdx = prev[frameFile] !== undefined ? prev[frameFile] : -1;
+      return {
+        ...prev,
+        [frameFile]: currentIdx + 1
+      };
+    });
+  };
+
+  const handleUndo = () => {
+    if (!currentFrameFile) return;
+    const stack = history[currentFrameFile];
+    const currentIdx = historyIndex[currentFrameFile];
+    if (!stack || currentIdx === undefined || currentIdx < 0) return;
+
+    const newIdx = currentIdx - 1;
+    let targetSrc = '';
+
+    if (newIdx === -1) {
+      // Revert to original raw image
+      if (framesDir) {
+        if (framesDir.startsWith('projects/')) {
+          targetSrc = `http://localhost:8000/${framesDir}/${currentFrameFile}`;
+        } else {
+          const cleanPath = framesDir.replace('ProcessedSprites/frames/', '');
+          targetSrc = `http://localhost:8000/frames/${cleanPath}/${currentFrameFile}`;
+        }
+      } else {
+        targetSrc = `http://localhost:8000/frames/${spriteId}/${currentFrameFile}`;
+      }
+    } else {
+      targetSrc = stack[newIdx];
+    }
+
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = targetSrc;
+    img.onload = () => {
+      setLoadedImages(prev => ({
+        ...prev,
+        [currentFrameFile]: img
+      }));
+      setRev(prev => prev + 1);
+      onFrameUpdate(currentFrameIndex, targetSrc);
+    };
+
+    setHistoryIndex(prev => ({
+      ...prev,
+      [currentFrameFile]: newIdx
+    }));
+  };
+
+  const handleRedo = () => {
+    if (!currentFrameFile) return;
+    const stack = history[currentFrameFile];
+    const currentIdx = historyIndex[currentFrameFile];
+    if (!stack || currentIdx === undefined || currentIdx >= stack.length - 1) return;
+
+    const newIdx = currentIdx + 1;
+    const targetSrc = stack[newIdx];
+
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = targetSrc;
+    img.onload = () => {
+      setLoadedImages(prev => ({
+        ...prev,
+        [currentFrameFile]: img
+      }));
+      setRev(prev => prev + 1);
+      onFrameUpdate(currentFrameIndex, targetSrc);
+    };
+
+    setHistoryIndex(prev => ({
+      ...prev,
+      [currentFrameFile]: newIdx
+    }));
   };
   
   const currentOffset = offsets.find(o => o.frameIndex === currentFrameIndex) || { frameIndex: currentFrameIndex, dx: 0, dy: 0 };
@@ -438,6 +542,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     // Trigger update
     const updatedDataUrl = offscreen.toDataURL('image/png');
     onFrameUpdate(currentFrameIndex, updatedDataUrl);
+    pushHistory(currentFrameFile, updatedDataUrl);
     setRev(prev => prev + 1);
     
     // Update local image cache immediately to feel responsive
@@ -526,6 +631,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     oCtx.putImageData(imgData, 0, 0);
     const updatedDataUrl = offscreen.toDataURL('image/png');
     onFrameUpdate(currentFrameIndex, updatedDataUrl);
+    pushHistory(currentFrameFile, updatedDataUrl);
     setRev(prev => prev + 1);
     
     // Update local image cache immediately
@@ -575,6 +681,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
 
     const updatedDataUrl = offscreen.toDataURL('image/png');
     onFrameUpdate(currentFrameIndex, updatedDataUrl);
+    pushHistory(currentFrameFile, updatedDataUrl);
     setRev(prev => prev + 1);
 
     // Update local image cache
@@ -636,74 +743,216 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
       if (e.ctrlKey && e.key === 'v') {
         handlePaste();
       }
+      
+      // Undo/Redo keybinds
+      if (e.ctrlKey && e.key === 'z') {
+        e.preventDefault();
+        handleUndo();
+      }
+      if (e.ctrlKey && e.key === 'y') {
+        e.preventDefault();
+        handleRedo();
+      }
     };
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentFrameIndex, selection, offsets, loadedImages, copiedBuffer]);
+  }, [currentFrameIndex, selection, offsets, loadedImages, copiedBuffer, history, historyIndex, frames, framesDir, spriteId, currentFrameFile]);
 
   return (
-    <div ref={containerRef} className="canvas-container flex-col relative w-full h-full bg-[#04060b]">
-      {/* Workspace Toolbar overlay */}
-      <div className="absolute top-4 left-4 z-10 flex gap-2 glass-panel p-2">
-        <button 
-          onClick={() => handleZoom('in')} 
-          className="btn-icon tooltip" 
-          data-tooltip="Zoom In"
-        >
-          <ZoomIn size={16} />
-        </button>
-        <button 
-          onClick={() => handleZoom('out')} 
-          className="btn-icon tooltip" 
-          data-tooltip="Zoom Out"
-        >
-          <ZoomOut size={16} />
-        </button>
-        <button 
-          onClick={() => handleZoom('fit')} 
-          className="btn-icon tooltip" 
-          data-tooltip="Recenter"
-        >
-          <Maximize size={16} />
-        </button>
+    <div ref={containerRef} className="flex flex-col w-full h-full bg-[#04060b] overflow-hidden">
+      {/* 1. Top Editor Control Bar (Solid header, not floating) */}
+      <div className="h-12 bg-[#090d1a] border-b border-white/5 flex items-center justify-between px-4 flex-shrink-0 select-none">
         
-        <div className="w-[1px] bg-white/10 mx-1"></div>
-        
-        {/* Nudge coordinates display */}
-        <div className="flex items-center gap-2 px-3 text-xs font-mono text-indigo-300">
-          <span>dx: {currentOffset.dx}px</span>
-          <span>dy: {currentOffset.dy}px</span>
+        {/* Left Side: Zoom Controls + Undo/Redo */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center bg-black/20 rounded-lg p-0.5 border border-white/5">
+            <button 
+              onClick={() => handleZoom('in')} 
+              className="p-1.5 hover:bg-white/5 rounded text-white/70 hover:text-white transition-all"
+              title="Zoom In"
+            >
+              <ZoomIn size={14} />
+            </button>
+            <button 
+              onClick={() => handleZoom('out')} 
+              className="p-1.5 hover:bg-white/5 rounded text-white/70 hover:text-white transition-all"
+              title="Zoom Out"
+            >
+              <ZoomOut size={14} />
+            </button>
+            <button 
+              onClick={() => handleZoom('fit')} 
+              className="p-1.5 hover:bg-white/5 rounded text-white/70 hover:text-white transition-all"
+              title="Fit Screen"
+            >
+              <Maximize size={14} />
+            </button>
+          </div>
+          
+          <div className="w-[1px] bg-white/10 h-5 mx-1"></div>
+          
+          <div className="flex items-center bg-black/20 rounded-lg p-0.5 border border-white/5">
+            <button 
+              onClick={handleUndo} 
+              className="p-1.5 hover:bg-white/5 rounded text-white/70 hover:text-white transition-all disabled:opacity-30 disabled:pointer-events-none"
+              title="Undo (Ctrl+Z)"
+              disabled={historyIndex[currentFrameFile] === undefined || historyIndex[currentFrameFile] === -1}
+            >
+              <Undo2 size={14} />
+            </button>
+            <button 
+              onClick={handleRedo} 
+              className="p-1.5 hover:bg-white/5 rounded text-white/70 hover:text-white transition-all disabled:opacity-30 disabled:pointer-events-none"
+              title="Redo (Ctrl+Y)"
+              disabled={!history[currentFrameFile] || historyIndex[currentFrameFile] === undefined || historyIndex[currentFrameFile] >= history[currentFrameFile].length - 1}
+            >
+              <Redo2 size={14} />
+            </button>
+          </div>
+        </div>
+
+        {/* Center: Contextual Tool Properties Bar */}
+        <div className="flex items-center gap-3">
+          {activeTool === 'pan' && (
+            <span className="text-[11px] text-white/40 italic">Pan mode active. Drag canvas to navigate.</span>
+          )}
+          
+          {(activeTool === 'brush' || activeTool === 'eraser') && (
+            <div className="flex items-center gap-4 bg-white/5 px-3 py-1 rounded-lg border border-white/5">
+              <span className="text-[11px] text-white/50 uppercase tracking-wider font-semibold font-mono">
+                {activeTool === 'brush' ? 'Brush Settings' : 'Eraser Settings'}
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-white/40 font-mono">Size:</span>
+                <input 
+                  type="range" 
+                  min="1" 
+                  max="20" 
+                  value={brushSize} 
+                  onChange={(e) => setBrushSize(parseInt(e.target.value))}
+                  className="w-20 h-1 bg-black/40 rounded-lg appearance-none cursor-pointer"
+                />
+                <span className="text-[11px] font-mono text-indigo-300 font-bold w-4">{brushSize}px</span>
+              </div>
+              {activeTool === 'brush' && (
+                <div className="flex items-center gap-2 border-l border-white/10 pl-3 flex-row">
+                  <span className="text-[10px] text-white/40 font-mono">Color:</span>
+                  <input 
+                    type="color" 
+                    value={brushColor} 
+                    onChange={(e) => setBrushColor(e.target.value)}
+                    className="w-5 h-5 p-0 border-0 bg-transparent cursor-pointer rounded"
+                  />
+                  <span className="text-[10px] font-mono text-white/60">{brushColor.toUpperCase()}</span>
+                </div>
+              )}
+            </div>
+          )}
+          
+          {activeTool === 'wand' && (
+            <div className="flex items-center gap-3 bg-white/5 px-3 py-1 rounded-lg border border-white/5">
+              <span className="text-[11px] text-white/50 uppercase tracking-wider font-semibold font-mono">Magic Wand Settings</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-white/40 font-mono">Tolerance:</span>
+                <input 
+                  type="range" 
+                  min="1" 
+                  max="100" 
+                  value={wandTolerance} 
+                  onChange={(e) => setWandTolerance(parseInt(e.target.value))}
+                  className="w-24 h-1 bg-black/40 rounded-lg appearance-none cursor-pointer"
+                />
+                <span className="text-[11px] font-mono text-indigo-300 font-bold w-6">{wandTolerance}</span>
+              </div>
+            </div>
+          )}
+
+          {activeTool === 'select' && (
+            <span className="text-[11px] text-white/40 italic">Drag to select bounding box. Copy with Ctrl+C, paste with Ctrl+V.</span>
+          )}
+        </div>
+
+        {/* Right Side: Coordinates Display & Offset Nudge info */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 px-3 py-1 bg-indigo-950/20 rounded-lg border border-indigo-900/20 text-xs font-mono text-indigo-300">
+            <span>dx: {currentOffset.dx}px</span>
+            <span>dy: {currentOffset.dy}px</span>
+          </div>
         </div>
       </div>
 
-      {/* Frame canvas */}
-      <div className="flex-1 w-full h-full flex items-center justify-center overflow-hidden">
-        <canvas
-          ref={canvasRef}
-          width={832}
-          height={480}
-          className="canvas-checkered-bg cursor-crosshair"
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-        />
-      </div>
-
-      {/* Copy / Paste controls overlay when selection is active */}
-      {selection && activeTool === 'select' && (
-        <div className="absolute bottom-4 left-4 z-10 flex gap-2 glass-panel p-2">
-          <button onClick={handleCopy} className="text-xs btn-primary">Copy (Ctrl+C)</button>
-          <button onClick={handlePaste} className="text-xs btn-success" disabled={!copiedBuffer}>Paste (Ctrl+V)</button>
-          <button onClick={() => setSelection(null)} className="text-xs btn-danger">Cancel</button>
+      {/* 2. Main Row: Side Tools + Viewport Canvas */}
+      <div className="flex-1 w-full h-full flex flex-row overflow-hidden relative">
+        
+        {/* Docked Left Sidebar Tools */}
+        <div className="w-14 bg-[#090d1a] border-r border-white/5 flex flex-col items-center py-4 gap-4 flex-shrink-0 select-none">
+          <button 
+            onClick={() => setActiveTool('pan')} 
+            className={`p-2 rounded-lg transition-all hover:bg-white/5 ${activeTool === 'pan' ? 'bg-indigo-600 hover:bg-indigo-500 text-white' : 'text-white/60 hover:text-white'}`}
+            title="Pan & Navigation"
+          >
+            <Move size={18} />
+          </button>
+          <button 
+            onClick={() => setActiveTool('brush')} 
+            className={`p-2 rounded-lg transition-all hover:bg-white/5 ${activeTool === 'brush' ? 'bg-indigo-600 hover:bg-indigo-500 text-white' : 'text-white/60 hover:text-white'}`}
+            title="Draw Brush"
+          >
+            <Edit size={18} />
+          </button>
+          <button 
+            onClick={() => setActiveTool('eraser')} 
+            className={`p-2 rounded-lg transition-all hover:bg-white/5 ${activeTool === 'eraser' ? 'bg-indigo-600 hover:bg-indigo-500 text-white' : 'text-white/60 hover:text-white'}`}
+            title="Eraser Tool"
+          >
+            <Eraser size={18} />
+          </button>
+          <button 
+            onClick={() => setActiveTool('wand')} 
+            className={`p-2 rounded-lg transition-all hover:bg-white/5 ${activeTool === 'wand' ? 'bg-indigo-600 hover:bg-indigo-500 text-white' : 'text-white/60 hover:text-white'}`}
+            title="Magic Wand (Keyer)"
+          >
+            <Wand2 size={18} />
+          </button>
+          <button 
+            onClick={() => setActiveTool('select')} 
+            className={`p-2 rounded-lg transition-all hover:bg-white/5 ${activeTool === 'select' ? 'bg-indigo-600 hover:bg-indigo-500 text-white' : 'text-white/60 hover:text-white'}`}
+            title="Copy Bounding Box"
+          >
+            <Grid size={18} />
+          </button>
         </div>
-      )}
 
-      {/* Navigation and key instructions */}
-      <div className="absolute bottom-4 right-4 z-10 glass-panel px-3 py-2 text-[11px] text-white/50 flex gap-4">
-        <span><kbd className="bg-white/10 px-1 rounded">Arrow Keys</kbd> Nudge Frame Offset</span>
-        <span><kbd className="bg-white/10 px-1 rounded">Ctrl + C/V</kbd> Copy/Paste selection</span>
+        {/* Viewport Canvas Drawing Area */}
+        <div className="flex-1 h-full flex items-center justify-center overflow-hidden relative bg-[#04060b]">
+          <canvas
+            ref={canvasRef}
+            width={832}
+            height={480}
+            className="canvas-checkered-bg cursor-crosshair"
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+          />
+
+          {/* Copy / Paste controls overlay when selection is active */}
+          {selection && activeTool === 'select' && (
+            <div className="absolute bottom-4 left-4 z-10 flex gap-2 glass-panel p-2 animate-fade-in">
+              <button onClick={handleCopy} className="text-xs btn-primary py-1 px-3">Copy (Ctrl+C)</button>
+              <button onClick={handlePaste} className="text-xs btn-success py-1 px-3" disabled={!copiedBuffer}>Paste (Ctrl+V)</button>
+              <button onClick={() => setSelection(null)} className="text-xs btn-danger py-1 px-2">Cancel</button>
+            </div>
+          )}
+
+          {/* Helper keyboard shortcuts text in bottom-right */}
+          <div className="absolute bottom-4 right-4 z-10 glass-panel px-3 py-1.5 text-[10px] text-white/40 flex gap-3 select-none pointer-events-none">
+            <span><kbd className="bg-white/10 px-1 rounded text-white/60 mr-1">Arrow Keys</kbd> Nudge Offset</span>
+            <span><kbd className="bg-white/10 px-1 rounded text-white/60 mr-1">Ctrl + C / V</kbd> Copy/Paste</span>
+            <span><kbd className="bg-white/10 px-1 rounded text-white/60 mr-1">Ctrl + Z / Y</kbd> Undo/Redo</span>
+          </div>
+        </div>
       </div>
     </div>
   );

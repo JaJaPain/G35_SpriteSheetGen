@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { 
   Sliders, Download, CheckCircle2, 
-  XCircle, Loader2, Sparkles, Move, Eraser, Edit, RefreshCw, Wand2, Info,
-  Save, Check, Grid, ChevronDown, ChevronUp, Plus
+  XCircle, Loader2, Sparkles, RefreshCw, Info,
+  Save, Check, ChevronDown, ChevronUp, Plus, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { CanvasWorkspace } from './components/CanvasWorkspace';
 import { Timeline } from './components/Timeline';
@@ -89,6 +89,11 @@ export default function App() {
   const [sprites, setSprites] = useState<SpriteData[]>([]);
   const [selectedSpriteId, setSelectedSpriteId] = useState<string | null>(null);
   const [isQcExpanded, setIsQcExpanded] = useState<boolean>(true);
+  const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState<boolean>(false);
+  const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState<boolean>(false);
+  const [isOffsetsExpanded, setIsOffsetsExpanded] = useState<boolean>(true);
+  const [isCandidatesExpanded, setIsCandidatesExpanded] = useState<boolean>(true);
+  const [isExportExpanded, setIsExportExpanded] = useState<boolean>(true);
   
   // Selection and editor states
   const [currentFrameIndex, setCurrentFrameIndex] = useState<number>(0);
@@ -878,148 +883,184 @@ export default function App() {
       </header>
 
       {/* Main Studio Workspace Grid */}
-      <div className={`studio-grid ${selectedSprite ? 'has-right-sidebar' : ''}`}>
+      <div 
+        className="studio-grid"
+        style={{
+          gridTemplateColumns: `${isLeftSidebarCollapsed ? '48px' : 'var(--sidebar-width)'} minmax(0, 1fr) ${
+            selectedSprite ? (isRightSidebarCollapsed ? '48px' : 'var(--right-sidebar-width)') : '0px'
+          }`
+        }}
+      >
         
-        {/* Left Sidebar: Sprite Queue grouped by Direction */}
-        <aside className="sidebar p-4 border-r border-white/5 flex flex-col gap-4">
-          <div className="flex flex-col gap-4 flex-1 overflow-y-auto pr-1">
-            {/* Project Pipeline Controller */}
-            {selectedProject && (
-              <div className="glass-panel p-3 border-indigo-900/30 bg-indigo-950/10 flex flex-col gap-2 flex-shrink-0">
-                <div className="flex items-center justify-between text-xs font-bold text-indigo-300">
-                  <span>Pipeline Controller</span>
-                  <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded font-mono capitalize">{pipelineStatus}</span>
-                </div>
-                
-                {pipelineStatus === 'running' ? (
-                  <button
-                    disabled
-                    className="btn-primary w-full py-2 flex items-center justify-center gap-1.5 opacity-60 cursor-not-allowed text-xs"
-                  >
-                    <Loader2 size={13} className="animate-spin" /> Generating...
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => handleRunPipeline('initial')}
-                    className="btn-primary w-full py-2 flex items-center justify-center gap-1.5 text-xs font-semibold shadow-[0_0_15px_rgba(99,102,241,0.15)]"
-                  >
-                    <Sparkles size={13} /> Run Walk Cycle Generator
-                  </button>
-                )}
-              </div>
-            )}
-
-            <div className="flex items-center justify-between mt-2">
-              <h2 className="text-xs font-semibold text-white/40 tracking-wider uppercase">Directions Queue</h2>
-              <span className="text-xs font-bold px-2 py-0.5 rounded bg-white/10 text-white/75">
-                {sprites.filter(s => s.status === 'verified').length} / 5 Done
-              </span>
-            </div>
-
-            {isLoading && sprites.length === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center gap-3 text-white/30 py-12">
-                <Loader2 className="animate-spin text-indigo-400" size={24} />
-                <span className="text-xs">Loading sprites...</span>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-3">
-                {directions.map((dir) => {
-                  const sprite = sprites.find(s => getSpriteDirection(s.id) === dir);
-                  if (!sprite) {
-                    return (
-                      <div key={dir} className="glass-panel p-3 border-dashed border-white/5 opacity-55 flex flex-col gap-1 text-xs">
-                        <span className="font-semibold text-white/50">{DIRECTION_LABELS[dir]}</span>
-                        <span className="text-white/30 italic">No sprite available for this direction</span>
-                      </div>
-                    );
-                  }
-                  
-                  const isSelected = sprite.id === selectedSpriteId;
-                  const passedCount = sprite.attempts ? sprite.attempts.filter(a => a.status === 'verified' && a.verification?.passed).length : (sprite.status === 'verified' && sprite.verification?.passed ? 1 : 0);
-                  const blacklistedCount = sprite.rejected_seeds ? sprite.rejected_seeds.length : 0;
-                  
-                  return (
-                    <div
-                      key={sprite.id}
-                      onClick={() => {
-                        setSelectedSpriteId(sprite.id);
-                        setCurrentFrameIndex(0);
-                        setExportResponse(null);
-                      }}
-                      className={`glass-panel p-3 cursor-pointer flex flex-col gap-2 transition-all hover:translate-x-0.5 ${
-                        isSelected 
-                          ? 'border-indigo-500 bg-indigo-950/20 shadow-[0_0_15px_rgba(99,102,241,0.15)]' 
-                          : 'hover:border-white/15'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="truncate">
-                          <div className="font-semibold text-[10px] text-white/40 tracking-wide uppercase">{DIRECTION_LABELS[dir]}</div>
-                          <div className="font-bold text-sm truncate text-white/90 mt-0.5">{sprite.original_filename}</div>
-                        </div>
-                        {getStatusBadge(sprite.status, sprite.verification?.passed)}
-                      </div>
-
-                      <div className="flex items-center gap-3 justify-between text-[11px] text-white/50 border-t border-white/5 pt-2 font-mono">
-                        <span>{passedCount}/6 Verified</span>
-                        {blacklistedCount > 0 && (
-                          <span className="bg-rose-500/20 text-rose-300 px-1.5 py-0.5 rounded text-[9px] font-bold">
-                            {blacklistedCount} Blacklisted
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+        {/* Collapsed Left Sidebar Strip */}
+        {isLeftSidebarCollapsed && (
+          <div className="w-12 border-r border-white/5 bg-[#0a0f1d] flex flex-col items-center py-4 gap-4 flex-shrink-0 select-none">
+            <button 
+              onClick={() => setIsLeftSidebarCollapsed(false)} 
+              className="p-2 hover:bg-white/5 rounded text-indigo-400 hover:text-indigo-300 transition-colors"
+              title="Expand Sidebar"
+            >
+              <ChevronRight size={18} />
+            </button>
+            <div className="w-[1px] bg-white/10 h-6"></div>
+            <span className="text-[10px] text-white/30 font-bold uppercase tracking-widest writing-vertical rotate-180 select-none">
+              Directions & Pipeline
+            </span>
           </div>
+        )}
 
-          {/* Model Status Card */}
-          {selectedSprite && !viewingAttempt && (
-            <div className={`glass-panel p-3 border-indigo-950 bg-indigo-950/10 flex flex-col gap-2 flex-shrink-0 transition-all ${
-              isQcExpanded ? 'max-h-[30%]' : 'max-h-[42px]'
-            } overflow-hidden`}>
-              <div 
-                className="flex items-center justify-between text-xs font-semibold text-indigo-300 cursor-pointer select-none"
-                onClick={() => setIsQcExpanded(!isQcExpanded)}
+        {/* Left Sidebar: Sprite Queue grouped by Direction */}
+        {!isLeftSidebarCollapsed && (
+          <aside className="sidebar p-4 border-r border-white/5 flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-white/5 pb-2 flex-shrink-0">
+              <h3 className="text-xs font-bold text-white/80 uppercase tracking-wider">Directions & Pipeline</h3>
+              <button 
+                onClick={() => setIsLeftSidebarCollapsed(true)} 
+                className="p-1 hover:bg-white/5 rounded text-white/50 hover:text-white transition-colors"
+                title="Collapse Sidebar"
               >
-                <div className="flex items-center gap-1.5">
-                  <Info size={14} /> Gemma 4 QC Report
-                </div>
-                {isQcExpanded ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
-              </div>
-              {isQcExpanded && (
-                <div className="overflow-y-auto flex flex-col gap-2 flex-1 pt-1">
-                  {selectedSprite.status === 'pending' ? (
-                    <div className="text-xs text-white/30 italic flex items-center gap-1.5">
-                      <Loader2 size={12} className={pipelineStatus === 'running' ? 'animate-spin' : ''} />
-                      {pipelineStatus === 'running' ? 'Generating walk cycle...' : 'Awaiting generation...'}
-                    </div>
-                  ) : selectedSprite.status === 'generated' ? (
-                    <div className="text-xs text-white/30 italic flex items-center gap-1.5">
-                      <Loader2 size={12} className="animate-spin" />
-                      Awaiting QC verification report...
-                    </div>
-                  ) : selectedSprite.verification ? (
-                    <div className="text-xs flex flex-col gap-1.5">
-                      <div className="text-white/80 font-medium">
-                        {selectedSprite.verification.passed ? '✅ Passed QC checks' : '❌ Failed QC checks'}
-                      </div>
-                      <p className="text-white/40 italic text-[11px] leading-relaxed">
-                        "{selectedSprite.verification.analysis}"
-                      </p>
-                    </div>
+                <ChevronLeft size={16} />
+              </button>
+            </div>
+            <div className="flex flex-col gap-4 flex-1 overflow-y-auto pr-1">
+              {/* Project Pipeline Controller */}
+              {selectedProject && (
+                <div className="glass-panel p-3 border-indigo-900/30 bg-indigo-950/10 flex flex-col gap-2 flex-shrink-0">
+                  <div className="flex items-center justify-between text-xs font-bold text-indigo-300">
+                    <span>Pipeline Controller</span>
+                    <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded font-mono capitalize">{pipelineStatus}</span>
+                  </div>
+                  
+                  {pipelineStatus === 'running' ? (
+                    <button
+                      disabled
+                      className="btn-primary w-full py-2 flex items-center justify-center gap-1.5 opacity-60 cursor-not-allowed text-xs"
+                    >
+                      <Loader2 size={13} className="animate-spin" /> Generating...
+                    </button>
                   ) : (
-                    <div className="text-xs text-white/30 italic">
-                      Run verification pipeline to inspect walk cycle frames.
-                    </div>
+                    <button
+                      onClick={() => handleRunPipeline('initial')}
+                      className="btn-primary w-full py-2 flex items-center justify-center gap-1.5 text-xs font-semibold shadow-[0_0_15px_rgba(99,102,241,0.15)]"
+                    >
+                      <Sparkles size={13} /> Run Walk Cycle Generator
+                    </button>
                   )}
                 </div>
               )}
+
+              <div className="flex items-center justify-between mt-2">
+                <h2 className="text-xs font-semibold text-white/40 tracking-wider uppercase">Directions Queue</h2>
+                <span className="text-xs font-bold px-2 py-0.5 rounded bg-white/10 text-white/75">
+                  {sprites.filter(s => s.status === 'verified').length} / 5 Done
+                </span>
+              </div>
+
+              {isLoading && sprites.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center gap-3 text-white/30 py-12">
+                  <Loader2 className="animate-spin text-indigo-400" size={24} />
+                  <span className="text-xs">Loading sprites...</span>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {directions.map((dir) => {
+                    const sprite = sprites.find(s => getSpriteDirection(s.id) === dir);
+                    if (!sprite) {
+                      return (
+                        <div key={dir} className="glass-panel p-3 border-dashed border-white/5 opacity-55 flex flex-col gap-1 text-xs">
+                          <span className="font-semibold text-white/50">{DIRECTION_LABELS[dir]}</span>
+                          <span className="text-white/30 italic">No sprite available for this direction</span>
+                        </div>
+                      );
+                    }
+                    
+                    const isSelected = sprite.id === selectedSpriteId;
+                    const passedCount = sprite.attempts ? sprite.attempts.filter(a => a.status === 'verified' && a.verification?.passed).length : (sprite.status === 'verified' && sprite.verification?.passed ? 1 : 0);
+                    const blacklistedCount = sprite.rejected_seeds ? sprite.rejected_seeds.length : 0;
+                    
+                    return (
+                      <div
+                        key={sprite.id}
+                        onClick={() => {
+                          setSelectedSpriteId(sprite.id);
+                          setCurrentFrameIndex(0);
+                          setExportResponse(null);
+                        }}
+                        className={`glass-panel p-3 cursor-pointer flex flex-col gap-2 transition-all hover:translate-x-0.5 ${
+                          isSelected 
+                            ? 'border-indigo-500 bg-indigo-950/20 shadow-[0_0_15px_rgba(99,102,241,0.15)]' 
+                            : 'hover:border-white/15'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="truncate">
+                            <div className="font-semibold text-[10px] text-white/40 tracking-wide uppercase">{DIRECTION_LABELS[dir]}</div>
+                            <div className="font-bold text-sm truncate text-white/90 mt-0.5">{sprite.original_filename}</div>
+                          </div>
+                          {getStatusBadge(sprite.status, sprite.verification?.passed)}
+                        </div>
+
+                        <div className="flex items-center gap-3 justify-between text-[11px] text-white/50 border-t border-white/5 pt-2 font-mono">
+                          <span>{passedCount}/6 Verified</span>
+                          {blacklistedCount > 0 && (
+                            <span className="bg-rose-500/20 text-rose-300 px-1.5 py-0.5 rounded text-[9px] font-bold">
+                              {blacklistedCount} Blacklisted
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          )}
-        </aside>
+
+            {/* Model Status Card */}
+            {selectedSprite && !viewingAttempt && (
+              <div className={`glass-panel p-3 border-indigo-950 bg-indigo-950/10 flex flex-col gap-2 flex-shrink-0 transition-all ${
+                isQcExpanded ? 'max-h-[30%]' : 'max-h-[42px]'
+              } overflow-hidden`}>
+                <div 
+                  className="flex items-center justify-between text-xs font-semibold text-indigo-300 cursor-pointer select-none"
+                  onClick={() => setIsQcExpanded(!isQcExpanded)}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <Info size={14} /> Gemma 4 QC Report
+                  </div>
+                  {isQcExpanded ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                </div>
+                {isQcExpanded && (
+                  <div className="overflow-y-auto flex flex-col gap-2 flex-1 pt-1">
+                    {selectedSprite.status === 'pending' ? (
+                      <div className="text-xs text-white/30 italic flex items-center gap-1.5">
+                        <Loader2 size={12} className={pipelineStatus === 'running' ? 'animate-spin' : ''} />
+                        {pipelineStatus === 'running' ? 'Generating walk cycle...' : 'Awaiting generation...'}
+                      </div>
+                    ) : selectedSprite.status === 'generated' ? (
+                      <div className="text-xs text-white/30 italic flex items-center gap-1.5">
+                        <Loader2 size={12} className="animate-spin" />
+                        Awaiting QC verification report...
+                      </div>
+                    ) : selectedSprite.verification ? (
+                      <div className="text-xs flex flex-col gap-1.5">
+                        <div className="text-white/80 font-medium">
+                          {selectedSprite.verification.passed ? '✅ Passed QC checks' : '❌ Failed QC checks'}
+                        </div>
+                        <p className="text-white/40 italic text-[11px] leading-relaxed">
+                          "{selectedSprite.verification.analysis}"
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-white/30 italic">
+                        Run verification pipeline to inspect walk cycle frames.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </aside>
+        )}
 
         {/* Center Canvas Work Area + Bottom Timeline */}
         {selectedSprite ? (
@@ -1059,12 +1100,16 @@ export default function App() {
                     spriteId={selectedSprite.id}
                     framesDir={activeFramesDir}
                     activeTool={activeTool}
+                    setActiveTool={setActiveTool}
                     brushSize={brushSize}
+                    setBrushSize={setBrushSize}
                     brushColor={brushColor}
+                    setBrushColor={setBrushColor}
                     onionSkinPrev={onionSkinPrev}
                     onionSkinNext={onionSkinNext}
                     onionSkinOpacity={onionSkinOpacity}
                     wandTolerance={wandTolerance}
+                    setWandTolerance={setWandTolerance}
                     onFrameUpdate={handleFrameUpdate}
                     onOffsetChange={handleOffsetChange}
                     previewChromaKey={previewChromaKey}
@@ -1102,84 +1147,6 @@ export default function App() {
                     )}
                   </div>
                 )}
-                
-                {/* Floating Editor Tool Drawer (Left side of Canvas, only if frames exist) */}
-                {activeFrames.length > 0 && (
-                  <div className="absolute top-20 left-4 z-10 glass-panel p-2 flex flex-col gap-2">
-                    <button 
-                      onClick={() => setActiveTool('pan')} 
-                      className={`btn-icon tooltip ${activeTool === 'pan' ? 'btn-primary' : ''}`}
-                      data-tooltip="Pan & Navigation"
-                    >
-                      <Move size={16} />
-                    </button>
-                    <button 
-                      onClick={() => setActiveTool('brush')} 
-                      className={`btn-icon tooltip ${activeTool === 'brush' ? 'btn-primary' : ''}`}
-                      data-tooltip="Draw Brush"
-                    >
-                      <Edit size={16} />
-                    </button>
-                    <button 
-                      onClick={() => setActiveTool('eraser')} 
-                      className={`btn-icon tooltip ${activeTool === 'eraser' ? 'btn-primary' : ''}`}
-                      data-tooltip="Eraser Tool"
-                    >
-                      <Eraser size={16} />
-                    </button>
-                    <button 
-                      onClick={() => setActiveTool('wand')} 
-                      className={`btn-icon tooltip ${activeTool === 'wand' ? 'btn-primary' : ''}`}
-                      data-tooltip="Magic Wand (Keyer)"
-                    >
-                      <Wand2 size={16} />
-                    </button>
-                    <button 
-                      onClick={() => setActiveTool('select')} 
-                      className={`btn-icon tooltip ${activeTool === 'select' ? 'btn-primary' : ''}`}
-                      data-tooltip="Copy Bounding Box"
-                    >
-                      <Grid size={16} />
-                    </button>
-
-                    {/* Additional parameters depending on tool */}
-                    {(activeTool === 'brush' || activeTool === 'eraser') && (
-                      <div className="border-t border-white/5 pt-2 flex flex-col items-center gap-1">
-                        <span className="text-[9px] text-white/40 font-mono">Size</span>
-                        <input 
-                          type="range" 
-                          min="1" 
-                          max="20" 
-                          value={brushSize} 
-                          onChange={(e) => setBrushSize(parseInt(e.target.value))}
-                          className="w-12"
-                        />
-                        {activeTool === 'brush' && (
-                          <input 
-                            type="color" 
-                            value={brushColor} 
-                            onChange={(e) => setBrushColor(e.target.value)}
-                            className="w-6 h-6 p-0 border-0 bg-transparent cursor-pointer rounded"
-                          />
-                        )}
-                      </div>
-                    )}
-
-                    {activeTool === 'wand' && (
-                      <div className="border-t border-white/5 pt-2 flex flex-col items-center gap-1">
-                        <span className="text-[9px] text-white/40 font-mono">Tol</span>
-                        <input 
-                          type="range" 
-                          min="1" 
-                          max="100" 
-                          value={wandTolerance} 
-                          onChange={(e) => setWandTolerance(parseInt(e.target.value))}
-                          className="w-12"
-                        />
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
 
               {/* Bottom Playback Timeline Panel */}
@@ -1204,371 +1171,451 @@ export default function App() {
               </div>
             </main>
 
-            {/* Right Sidebar: Adjustments & Export */}
-            <aside className="right-sidebar p-4 flex flex-col gap-4 overflow-y-auto">
-              <div className="flex items-center justify-between border-b border-white/5 pb-2 flex-shrink-0">
-                <h3 className="text-xs font-bold text-white/80 uppercase tracking-wider">Adjustment & Export</h3>
+            {/* Collapsed Right Sidebar Strip */}
+            {selectedSprite && isRightSidebarCollapsed && (
+              <div className="w-12 border-l border-white/5 bg-[#0a0f1d] flex flex-col items-center py-4 gap-4 flex-shrink-0 select-none">
                 <button 
-                  onClick={handleSaveOffsets} 
-                  className="btn-success px-2.5 py-1 text-xs"
-                  disabled={isSavingOffsets || activeFrames.length === 0}
+                  onClick={() => setIsRightSidebarCollapsed(false)} 
+                  className="p-2 hover:bg-white/5 rounded text-indigo-400 hover:text-indigo-300 transition-colors"
+                  title="Expand Sidebar"
                 >
-                  {isSavingOffsets ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Save Offsets
+                  <ChevronLeft size={18} />
                 </button>
+                <div className="w-[1px] bg-white/10 h-6"></div>
+                <span className="text-[10px] text-white/30 font-bold uppercase tracking-widest writing-vertical select-none font-sans">
+                  Adjustments & Export
+                </span>
               </div>
+            )}
 
-              {/* Prompt box */}
-              <div className="flex flex-col gap-1.5 flex-shrink-0">
-                <span className="text-[10px] font-bold text-white/40 tracking-wide uppercase">Walk Direction Prompt</span>
-                <div className="bg-black/30 border border-white/5 p-2 rounded-lg text-xs leading-relaxed text-indigo-200 font-mono">
-                  "{selectedSprite.prompt}"
+            {/* Right Sidebar: Adjustments & Export */}
+            {selectedSprite && !isRightSidebarCollapsed && (
+              <aside className="right-sidebar p-4 flex flex-col gap-4 overflow-y-auto">
+                <div className="flex items-center justify-between border-b border-white/5 pb-2 flex-shrink-0">
+                  <h3 className="text-xs font-bold text-white/80 uppercase tracking-wider">Adjustment & Export</h3>
+                  <button 
+                    onClick={() => setIsRightSidebarCollapsed(true)} 
+                    className="p-1 hover:bg-white/5 rounded text-white/50 hover:text-white transition-colors"
+                    title="Collapse Sidebar"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
                 </div>
-              </div>
 
-              {/* Nudge Control panel (active only when frames loaded) */}
-              {activeFrames.length > 0 && (
-                <div className="flex flex-col gap-2 flex-shrink-0">
-                  <span className="text-[10px] font-bold text-white/40 tracking-wide uppercase">Offset Correction Nudges</span>
-                  <div className="grid grid-cols-3 gap-1 w-32 mx-auto mt-1">
-                    <div></div>
-                    <button onClick={() => handleOffsetChange(currentFrameIndex, activeOffsets.find(o => o.frameIndex === currentFrameIndex)?.dx || 0, (activeOffsets.find(o => o.frameIndex === currentFrameIndex)?.dy || 0) - 1)} className="btn-icon w-full p-1"><Sliders size={12} className="rotate-90" /></button>
-                    <div></div>
-                    <button onClick={() => handleOffsetChange(currentFrameIndex, (activeOffsets.find(o => o.frameIndex === currentFrameIndex)?.dx || 0) - 1, activeOffsets.find(o => o.frameIndex === currentFrameIndex)?.dy || 0)} className="btn-icon w-full p-1"><Sliders size={12} style={{ transform: 'scaleX(-1)' }} /></button>
-                    <div className="flex items-center justify-center text-[10px] font-mono text-white/30">Nudge</div>
-                    <button onClick={() => handleOffsetChange(currentFrameIndex, (activeOffsets.find(o => o.frameIndex === currentFrameIndex)?.dx || 0) + 1, activeOffsets.find(o => o.frameIndex === currentFrameIndex)?.dy || 0)} className="btn-icon w-full p-1"><Sliders size={12} /></button>
-                    <div></div>
-                    <button onClick={() => handleOffsetChange(currentFrameIndex, activeOffsets.find(o => o.frameIndex === currentFrameIndex)?.dx || 0, (activeOffsets.find(o => o.frameIndex === currentFrameIndex)?.dy || 0) + 1)} className="btn-icon w-full p-1"><Sliders size={12} className="-rotate-90" /></button>
-                    <div></div>
-                  </div>
-                </div>
-              )}
-
-              {/* Frame-Specific Keying overrides (active only when frames loaded) */}
-              {activeFrames.length > 0 && (() => {
-                const currentOverride = activeOffsets.find(o => o.frameIndex === currentFrameIndex);
-                const hasCustomTolerance = currentOverride?.tolerance !== undefined;
-                const customToleranceValue = hasCustomTolerance ? currentOverride.tolerance : exportTolerance;
-                
-                const hasCustomColor = currentOverride?.override_color !== undefined;
-                const customColorHex = hasCustomColor 
-                  ? rgbToHex(currentOverride.override_color!) 
-                  : rgbToHex(selectedSprite.background_rgb || [255, 255, 255]);
-
-                return (
-                  <div className="flex flex-col gap-2.5 border-t border-white/5 pt-3 flex-shrink-0">
-                    <span className="text-[10px] font-bold text-white/40 tracking-wide uppercase">
-                      Frame {currentFrameIndex} Keying Overrides
+                {/* 1. Offsets & Adjustments collapsible panel */}
+                <div className="border border-white/5 rounded-lg bg-black/10 overflow-hidden flex flex-col flex-shrink-0">
+                  <div 
+                    onClick={() => setIsOffsetsExpanded(!isOffsetsExpanded)}
+                    className="flex items-center justify-between p-3 bg-white/5 hover:bg-white/10 cursor-pointer select-none transition-all"
+                  >
+                    <span className="text-[11px] font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Sliders size={12} /> 1. Offsets & Adjustments
                     </span>
-                    
-                    {/* Tolerance Override */}
-                    <div className="flex flex-col gap-1 bg-white/5 p-2 rounded-lg border border-white/5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] text-white/70">Custom Tolerance</span>
-                        <button 
-                          onClick={() => handleUpdateFrameOverride('tolerance', hasCustomTolerance ? null : exportTolerance)}
-                          className="text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold"
-                        >
-                          {hasCustomTolerance ? 'Reset to Global' : 'Customize'}
-                        </button>
-                      </div>
-                      {hasCustomTolerance && (
-                        <div className="flex items-center gap-2 mt-1.5">
-                          <input 
-                            type="range" 
-                            min="5" 
-                            max="80" 
-                            value={customToleranceValue}
-                            onChange={(e) => handleUpdateFrameOverride('tolerance', parseInt(e.target.value))}
-                            className="flex-1 h-1.5 bg-black/40 rounded-lg appearance-none cursor-pointer"
-                          />
-                          <span className="text-[11px] font-mono text-indigo-300 w-5 text-right font-bold">{customToleranceValue}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Color Override */}
-                    <div className="flex flex-col gap-1 bg-white/5 p-2 rounded-lg border border-white/5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] text-white/70">Custom BG Color</span>
-                        <button 
-                          onClick={() => handleUpdateFrameOverride('override_color', hasCustomColor ? null : customColorHex)}
-                          className="text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold"
-                        >
-                          {hasCustomColor ? 'Reset to Auto' : 'Customize'}
-                        </button>
-                      </div>
-                      {hasCustomColor && (
-                        <div className="flex items-center gap-2 mt-1.5">
-                          <input 
-                            type="color" 
-                            value={customColorHex}
-                            onChange={(e) => handleUpdateFrameOverride('override_color', e.target.value)}
-                            className="w-8 h-6 p-0 border-0 bg-transparent cursor-pointer rounded animate-fade-in"
-                          />
-                          <span className="text-[11px] font-mono text-white/50">{customColorHex.toUpperCase()}</span>
-                        </div>
-                      )}
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSaveOffsets();
+                        }} 
+                        className="btn-success text-[10px] px-2 py-0.5"
+                        disabled={isSavingOffsets || activeFrames.length === 0}
+                      >
+                        {isSavingOffsets ? <Loader2 size={10} className="animate-spin" /> : <Save size={10} />} Save
+                      </button>
+                      {isOffsetsExpanded ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
                     </div>
                   </div>
-                );
-              })()}
 
-              {/* Candidates & Seed feedback loop panel */}
-              {selectedSprite && (
-                <div className="flex flex-col gap-3 border-t border-white/5 pt-3 flex-shrink-0">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-white/40 tracking-wide uppercase">
-                      Candidates & Seeds
-                    </span>
-                    <button
-                      onClick={() => handleRunPipeline('regen', selectedSprite.processed_filename)}
-                      className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold flex items-center gap-1"
-                      disabled={pipelineStatus === 'running'}
-                    >
-                      <Plus size={10} /> Add 3 Candidates
-                    </button>
-                  </div>
-                  
-                  {selectedSprite.attempts && selectedSprite.attempts.length > 0 ? (
-                    <div className="flex flex-col gap-2 max-h-[220px] overflow-y-auto pr-1">
-                      {(() => {
-                        const passedAttempts = selectedSprite.attempts.filter(
-                          (attempt) =>
-                            (attempt.status === 'verified' && attempt.verification?.passed) ||
-                            attempt.status === 'pending' ||
-                            attempt.status === 'generated'
-                        );
-                        const failedAttempts = selectedSprite.attempts.filter(
-                          (attempt) =>
-                            attempt.status !== 'pending' &&
-                            attempt.status !== 'generated' &&
-                            !(attempt.status === 'verified' && attempt.verification?.passed)
-                        );
+                  {isOffsetsExpanded && (
+                    <div className="p-3 flex flex-col gap-4 border-t border-white/5 bg-black/20">
+                      {/* Prompt box */}
+                      <div className="flex flex-col gap-1.5 flex-shrink-0">
+                        <span className="text-[9px] font-bold text-white/40 tracking-wide uppercase">Walk Direction Prompt</span>
+                        <div className="bg-black/30 border border-white/5 p-2 rounded-lg text-xs leading-relaxed text-indigo-200 font-mono">
+                          "{selectedSprite.prompt}"
+                        </div>
+                      </div>
+
+                      {/* Nudge Control panel */}
+                      {activeFrames.length > 0 && (
+                        <div className="flex flex-col gap-2 flex-shrink-0">
+                          <span className="text-[9px] font-bold text-white/40 tracking-wide uppercase">Offset Correction Nudges</span>
+                          <div className="grid grid-cols-3 gap-1 w-32 mx-auto mt-1">
+                            <div></div>
+                            <button onClick={() => handleOffsetChange(currentFrameIndex, activeOffsets.find(o => o.frameIndex === currentFrameIndex)?.dx || 0, (activeOffsets.find(o => o.frameIndex === currentFrameIndex)?.dy || 0) - 1)} className="btn-icon w-full p-1"><Sliders size={12} className="rotate-90" /></button>
+                            <div></div>
+                            <button onClick={() => handleOffsetChange(currentFrameIndex, (activeOffsets.find(o => o.frameIndex === currentFrameIndex)?.dx || 0) - 1, activeOffsets.find(o => o.frameIndex === currentFrameIndex)?.dy || 0)} className="btn-icon w-full p-1"><Sliders size={12} style={{ transform: 'scaleX(-1)' }} /></button>
+                            <div className="flex items-center justify-center text-[10px] font-mono text-white/30">Nudge</div>
+                            <button onClick={() => handleOffsetChange(currentFrameIndex, (activeOffsets.find(o => o.frameIndex === currentFrameIndex)?.dx || 0) + 1, activeOffsets.find(o => o.frameIndex === currentFrameIndex)?.dy || 0)} className="btn-icon w-full p-1"><Sliders size={12} /></button>
+                            <div></div>
+                            <button onClick={() => handleOffsetChange(currentFrameIndex, activeOffsets.find(o => o.frameIndex === currentFrameIndex)?.dx || 0, (activeOffsets.find(o => o.frameIndex === currentFrameIndex)?.dy || 0) + 1)} className="btn-icon w-full p-1"><Sliders size={12} className="-rotate-90" /></button>
+                            <div></div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Frame-Specific Keying overrides */}
+                      {activeFrames.length > 0 && (() => {
+                        const currentOverride = activeOffsets.find(o => o.frameIndex === currentFrameIndex);
+                        const hasCustomTolerance = currentOverride?.tolerance !== undefined;
+                        const customToleranceValue = hasCustomTolerance ? currentOverride.tolerance : exportTolerance;
+                        
+                        const hasCustomColor = currentOverride?.override_color !== undefined;
+                        const customColorHex = hasCustomColor 
+                          ? rgbToHex(currentOverride.override_color!) 
+                          : rgbToHex(selectedSprite.background_rgb || [255, 255, 255]);
 
                         return (
-                          <>
-                            {failedAttempts.length > 0 && (
-                              <div
-                                onClick={() => setIsFailedSeedsModalOpen(true)}
-                                className="p-2.5 rounded-lg border border-rose-500/20 bg-rose-500/10 hover:bg-rose-500/15 hover:border-rose-500/30 cursor-pointer flex items-center justify-between transition-all"
-                              >
-                                <div className="flex items-center gap-2 text-rose-300">
-                                  <XCircle size={14} className="text-rose-400" />
-                                  <span className="text-[11px] font-semibold">
-                                    {failedAttempts.length} {failedAttempts.length === 1 ? 'video' : 'videos'} rejected by Gemma
-                                  </span>
-                                </div>
-                                <span className="text-[9px] text-rose-400 bg-rose-500/20 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
-                                  View
-                                </span>
-                              </div>
-                            )}
-
-                            {passedAttempts.map((attempt) => {
-                              const isCurrentActive = activeAttempt?.seed === attempt.seed;
-                              const qcPassed = attempt.status === 'verified' && attempt.verification?.passed;
-                              
-                              return (
-                                <div
-                                  key={attempt.seed}
-                                  onClick={() => setSelectedAttemptSeed(attempt.seed)}
-                                  className={`p-2 rounded-lg border text-xs cursor-pointer flex flex-col gap-1.5 transition-all ${
-                                    isCurrentActive
-                                      ? 'border-indigo-500 bg-indigo-950/20'
-                                      : 'border-white/5 bg-white/5 hover:border-white/10 hover:bg-white/10'
-                                  }`}
+                          <div className="flex flex-col gap-2.5 border-t border-white/5 pt-3 flex-shrink-0">
+                            <span className="text-[9px] font-bold text-white/40 tracking-wide uppercase">
+                              Frame {currentFrameIndex} Keying Overrides
+                            </span>
+                            
+                            {/* Tolerance Override */}
+                            <div className="flex flex-col gap-1 bg-white/5 p-2 rounded-lg border border-white/5">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[11px] text-white/70">Custom Tolerance</span>
+                                <button 
+                                  onClick={() => handleUpdateFrameOverride('tolerance', hasCustomTolerance ? null : exportTolerance)}
+                                  className="text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold animate-fade-in"
                                 >
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="font-semibold text-white/80">Seed {attempt.seed}</span>
-                                      {attempt.is_good && (
-                                        <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1 py-0.2 rounded font-bold flex items-center gap-0.5 border border-amber-500/10">
-                                          ★ Good Seed
-                                        </span>
-                                      )}
-                                    </div>
-                                    <span className={`text-[9px] px-1.5 py-0.5 rounded border ${
-                                      qcPassed 
-                                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/10' 
-                                        : attempt.status === 'pending' || attempt.status === 'generated'
-                                          ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/10'
-                                          : 'bg-rose-500/20 text-rose-300 border-rose-500/10'
-                                    }`}>
-                                      {qcPassed 
-                                        ? 'Passed QC' 
-                                        : attempt.status === 'pending' || attempt.status === 'generated'
-                                          ? 'Pending' 
-                                          : 'Failed QC'}
-                                    </span>
-                                  </div>
-
-                                  {/* Show detailed controls and analysis if selected/active */}
-                                  {isCurrentActive && (
-                                    <div className="flex flex-col gap-2 border-t border-white/5 pt-2 mt-1">
-                                      {attempt.verification?.analysis && (
-                                        <p className="text-[10px] text-white/50 italic leading-relaxed bg-black/20 p-1.5 rounded border border-white/5">
-                                          "{attempt.verification.analysis}"
-                                        </p>
-                                      )}
-                                      <div className="flex items-center gap-1.5">
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleApproveSeed(selectedSprite.processed_filename, attempt.seed);
-                                          }}
-                                          className={`flex-1 py-1 px-2 rounded font-bold text-[10px] transition-all flex items-center justify-center gap-1 ${
-                                            attempt.is_good
-                                              ? 'bg-amber-600/30 text-amber-300 border border-amber-500/20 cursor-default'
-                                              : 'bg-indigo-600 hover:bg-indigo-500 text-white'
-                                          }`}
-                                          disabled={attempt.is_good}
-                                        >
-                                          ★ {attempt.is_good ? 'Good Approved' : 'Mark as Good'}
-                                        </button>
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleRejectSeed(selectedSprite.processed_filename, attempt.seed);
-                                          }}
-                                          className="py-1 px-2 rounded bg-rose-600 hover:bg-rose-500 text-white font-bold text-[10px] transition-all flex items-center justify-center gap-1"
-                                        >
-                                          Delete
-                                        </button>
-                                      </div>
-                                    </div>
-                                  )}
+                                  {hasCustomTolerance ? 'Reset to Global' : 'Customize'}
+                                </button>
+                              </div>
+                              {hasCustomTolerance && (
+                                <div className="flex items-center gap-2 mt-1.5">
+                                  <input 
+                                    type="range" 
+                                    min="5" 
+                                    max="80" 
+                                    value={customToleranceValue}
+                                    onChange={(e) => handleUpdateFrameOverride('tolerance', parseInt(e.target.value))}
+                                    className="flex-1 h-1.5 bg-black/40 rounded-lg appearance-none cursor-pointer"
+                                  />
+                                  <span className="text-[11px] font-mono text-indigo-300 w-5 text-right font-bold">{customToleranceValue}</span>
                                 </div>
-                              );
-                            })}
-                          </>
+                              )}
+                            </div>
+
+                            {/* Color Override */}
+                            <div className="flex flex-col gap-1 bg-white/5 p-2 rounded-lg border border-white/5">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[11px] text-white/70">Custom BG Color</span>
+                                <button 
+                                  onClick={() => handleUpdateFrameOverride('override_color', hasCustomColor ? null : customColorHex)}
+                                  className="text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold animate-fade-in"
+                                >
+                                  {hasCustomColor ? 'Reset to Auto' : 'Customize'}
+                                </button>
+                              </div>
+                              {hasCustomColor && (
+                                <div className="flex items-center gap-2 mt-1.5">
+                                  <input 
+                                    type="color" 
+                                    value={customColorHex}
+                                    onChange={(e) => handleUpdateFrameOverride('override_color', e.target.value)}
+                                    className="w-8 h-6 p-0 border-0 bg-transparent cursor-pointer rounded animate-fade-in"
+                                  />
+                                  <span className="text-[11px] font-mono text-white/50">{customColorHex.toUpperCase()}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         );
                       })()}
                     </div>
-                  ) : (
-                    <div className="text-xs text-white/30 italic p-3 border border-white/5 rounded-lg bg-white/5 text-center">
-                      No candidates generated yet.
+                  )}
+                </div>
+
+                {/* 2. Candidates & Seeds collapsible panel */}
+                <div className="border border-white/5 rounded-lg bg-black/10 overflow-hidden flex flex-col flex-shrink-0">
+                  <div 
+                    onClick={() => setIsCandidatesExpanded(!isCandidatesExpanded)}
+                    className="flex items-center justify-between p-3 bg-white/5 hover:bg-white/10 cursor-pointer select-none transition-all"
+                  >
+                    <span className="text-[11px] font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Sparkles size={12} /> 2. Candidates & Seeds
+                    </span>
+                    {isCandidatesExpanded ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                  </div>
+
+                  {isCandidatesExpanded && (
+                    <div className="p-3 flex flex-col gap-3 border-t border-white/5 bg-black/20">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9px] font-bold text-white/40 tracking-wide uppercase">
+                          Candidates & Seeds
+                        </span>
+                        <button
+                          onClick={() => handleRunPipeline('regen', selectedSprite.processed_filename)}
+                          className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold flex items-center gap-1"
+                          disabled={pipelineStatus === 'running'}
+                        >
+                          <Plus size={10} /> Add 3 Candidates
+                        </button>
+                      </div>
+                      
+                      {selectedSprite.attempts && selectedSprite.attempts.length > 0 ? (
+                        <div className="flex flex-col gap-2 max-h-[200px] overflow-y-auto pr-1">
+                          {(() => {
+                            const passedAttempts = selectedSprite.attempts.filter(
+                              (attempt) =>
+                                (attempt.status === 'verified' && attempt.verification?.passed) ||
+                                attempt.status === 'pending' ||
+                                attempt.status === 'generated'
+                            );
+                            const failedAttempts = selectedSprite.attempts.filter(
+                              (attempt) =>
+                                attempt.status !== 'pending' &&
+                                attempt.status !== 'generated' &&
+                                !(attempt.status === 'verified' && attempt.verification?.passed)
+                            );
+
+                            return (
+                              <>
+                                {failedAttempts.length > 0 && (
+                                  <div
+                                    onClick={() => setIsFailedSeedsModalOpen(true)}
+                                    className="p-2.5 rounded-lg border border-rose-500/20 bg-rose-500/10 hover:bg-rose-500/15 hover:border-rose-500/30 cursor-pointer flex items-center justify-between transition-all"
+                                  >
+                                    <div className="flex items-center gap-2 text-rose-300">
+                                      <XCircle size={14} className="text-rose-400" />
+                                      <span className="text-[11px] font-semibold">
+                                        {failedAttempts.length} {failedAttempts.length === 1 ? 'video' : 'videos'} rejected by Gemma
+                                      </span>
+                                    </div>
+                                    <span className="text-[9px] text-rose-400 bg-rose-500/20 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                                      View
+                                    </span>
+                                  </div>
+                                )}
+
+                                {passedAttempts.map((attempt) => {
+                                  const isCurrentActive = activeAttempt?.seed === attempt.seed;
+                                  const qcPassed = attempt.status === 'verified' && attempt.verification?.passed;
+                                  
+                                  return (
+                                    <div
+                                      key={attempt.seed}
+                                      onClick={() => setSelectedAttemptSeed(attempt.seed)}
+                                      className={`p-2 rounded-lg border text-xs cursor-pointer flex flex-col gap-1.5 transition-all ${
+                                        isCurrentActive
+                                          ? 'border-indigo-500 bg-indigo-950/20'
+                                          : 'border-white/5 bg-white/5 hover:border-white/10 hover:bg-white/10'
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="font-semibold text-white/80">Seed {attempt.seed}</span>
+                                          {attempt.is_good && (
+                                            <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1 py-0.2 rounded font-bold flex items-center gap-0.5 border border-amber-500/10">
+                                              ★ Good Seed
+                                            </span>
+                                          )}
+                                        </div>
+                                        <span className={`text-[9px] px-1.5 py-0.5 rounded border ${
+                                          qcPassed 
+                                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/10' 
+                                            : attempt.status === 'pending' || attempt.status === 'generated'
+                                              ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/10'
+                                              : 'bg-rose-500/20 text-rose-300 border-rose-500/10'
+                                        }`}>
+                                          {qcPassed 
+                                            ? 'Passed QC' 
+                                            : attempt.status === 'pending' || attempt.status === 'generated'
+                                              ? 'Pending' 
+                                              : 'Failed QC'}
+                                        </span>
+                                      </div>
+
+                                      {/* Show detailed controls and analysis if selected/active */}
+                                      {isCurrentActive && (
+                                        <div className="flex flex-col gap-2 border-t border-white/5 pt-2 mt-1">
+                                          {attempt.verification?.analysis && (
+                                            <p className="text-[10px] text-white/50 italic leading-relaxed bg-black/20 p-1.5 rounded border border-white/5">
+                                              "{attempt.verification.analysis}"
+                                            </p>
+                                          )}
+                                          <div className="flex items-center gap-1.5">
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleApproveSeed(selectedSprite.processed_filename, attempt.seed);
+                                              }}
+                                              className={`flex-1 py-1 px-2 rounded font-bold text-[10px] transition-all flex items-center justify-center gap-1 ${
+                                                attempt.is_good
+                                                  ? 'bg-amber-600/30 text-amber-300 border border-amber-500/20 cursor-default'
+                                                  : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                                              }`}
+                                              disabled={attempt.is_good}
+                                            >
+                                              ★ {attempt.is_good ? 'Good Approved' : 'Mark as Good'}
+                                            </button>
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleRejectSeed(selectedSprite.processed_filename, attempt.seed);
+                                              }}
+                                              className="py-1 px-2 rounded bg-rose-600 hover:bg-rose-500 text-white font-bold text-[10px] transition-all flex items-center justify-center gap-1"
+                                            >
+                                              Delete
+                                            </button>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </>
+                            );
+                          })()}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-white/30 italic p-3 border border-white/5 rounded-lg bg-white/5 text-center">
+                          No candidates generated yet.
+                        </div>
+                      )}
+
+                      <button
+                        onClick={() => handleResetSprite(selectedSprite.id)}
+                        className="btn-danger w-full text-xs py-2 flex items-center justify-center gap-1.5 font-bold"
+                        disabled={selectedSprite.status === 'pending' || pipelineStatus === 'running'}
+                      >
+                        <RefreshCw size={12} /> Reject & Reset Sprite
+                      </button>
                     </div>
                   )}
-
-                  <button
-                    onClick={() => handleResetSprite(selectedSprite.id)}
-                    className="btn-danger w-full text-xs py-2 flex items-center justify-center gap-1.5 font-bold"
-                    disabled={selectedSprite.status === 'pending' || pipelineStatus === 'running'}
-                  >
-                    <RefreshCw size={12} /> Reject & Reset Sprite
-                  </button>
                 </div>
-              )}
 
-              {/* Export Options Form (active only when frames exist) */}
-              {activeFrames.length > 0 && (
-                <div className="flex flex-col gap-3.5 border-t border-white/5 pt-3 flex-shrink-0">
-                  <span className="text-[10px] font-bold text-white/40 tracking-wide uppercase">Export Generator Settings</span>
-                  
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs text-white/60">Tolerance (Background removal)</label>
-                    <div className="flex items-center gap-2">
-                      <input 
-                        type="range" 
-                        min="5" 
-                        max="80" 
-                        value={exportTolerance}
-                        onChange={(e) => setExportTolerance(parseInt(e.target.value))}
-                        className="flex-1"
-                      />
-                      <span className="text-xs font-mono w-6 text-right text-indigo-300">{exportTolerance}</span>
+                {/* 3. Export Options collapsible panel */}
+                <div className="border border-white/5 rounded-lg bg-black/10 overflow-hidden flex flex-col flex-shrink-0">
+                  <div 
+                    onClick={() => setIsExportExpanded(!isExportExpanded)}
+                    className="flex items-center justify-between p-3 bg-white/5 hover:bg-white/10 cursor-pointer select-none transition-all"
+                  >
+                    <span className="text-[11px] font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Download size={12} /> 3. Export settings
+                    </span>
+                    {isExportExpanded ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                  </div>
+
+                  {isExportExpanded && (
+                    <div className="p-3 flex flex-col gap-3.5 border-t border-white/5 bg-black/20">
+                      {activeFrames.length > 0 ? (
+                        <>
+                          <span className="text-[9px] font-bold text-white/40 tracking-wide uppercase">Export Generator Settings</span>
+                          
+                          <div className="flex flex-col gap-1.5">
+                            <label className="text-xs text-white/60">Tolerance (Background removal)</label>
+                            <div className="flex items-center gap-2">
+                              <input 
+                                type="range" 
+                                min="5" 
+                                max="80" 
+                                value={exportTolerance}
+                                onChange={(e) => setExportTolerance(parseInt(e.target.value))}
+                                className="flex-1"
+                              />
+                              <span className="text-xs font-mono w-6 text-right text-indigo-300">{exportTolerance}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 bg-white/5 border border-white/5 px-2.5 py-1.5 rounded-lg">
+                            <input 
+                              type="checkbox" 
+                              id="previewChromaKey"
+                              checked={previewChromaKey}
+                              onChange={(e) => setPreviewChromaKey(e.target.checked)}
+                              className="rounded border-white/10 bg-black/40 text-indigo-600 focus:ring-0 focus:ring-offset-0 cursor-pointer w-3.5 h-3.5"
+                            />
+                            <label htmlFor="previewChromaKey" className="text-[11px] text-white/70 select-none cursor-pointer font-medium leading-none">
+                              Preview Transparency in Editor
+                            </label>
+                          </div>
+
+                          <div className="flex flex-col gap-1.5">
+                            <label className="text-xs text-white/60">Padding around character (px)</label>
+                            <input 
+                              type="number" 
+                              min="0" 
+                              max="32" 
+                              value={exportPadding}
+                              onChange={(e) => setExportPadding(parseInt(e.target.value))}
+                              className="w-full text-xs bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-white font-medium"
+                            />
+                          </div>
+
+                          <div className="flex flex-col gap-1.5">
+                            <label className="text-xs text-white/60">Export Target Layout</label>
+                            <select 
+                              value={exportType}
+                              onChange={(e) => setExportType(e.target.value)}
+                              className="w-full text-xs bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-white font-medium"
+                            >
+                              <option value="spritesheet">Horizontal Spritesheet (Horizontal Strip)</option>
+                              <option value="sequence">Transparent PNG Sequence</option>
+                              <option value="both">Both (Sheet + Sequence)</option>
+                            </select>
+                          </div>
+
+                          <button 
+                            onClick={handleExport} 
+                            className="btn-primary w-full mt-1.5 text-xs py-2 font-bold"
+                            disabled={isExporting}
+                          >
+                            {isExporting ? <Loader2 size={14} className="animate-spin mr-1.5" /> : <Download size={14} className="mr-1.5" />} 
+                            {isExporting ? 'Generating...' : 'Compile & Export Sprite'}
+                          </button>
+                        </>
+                      ) : (
+                        <div className="text-xs text-white/30 italic text-center py-2">
+                          No frames loaded to export.
+                        </div>
+                      )}
+
+                      {/* Export Response Display */}
+                      {exportResponse && (
+                        <div className="p-3 border border-emerald-950 bg-emerald-950/20 rounded-lg flex flex-col gap-2 text-xs">
+                          <div className="font-semibold text-emerald-400 flex items-center gap-1.5">
+                            <CheckCircle2 size={14} /> Export Completed
+                          </div>
+                          <div className="text-[11px] text-white/60 font-mono">
+                            Dimensions: {exportResponse.dimensions.width}x{exportResponse.dimensions.height}px
+                          </div>
+                          
+                          <div className="flex flex-col gap-1.5 mt-1">
+                            {exportResponse.export_paths.spritesheet && (
+                              <a 
+                                href={`http://localhost:8000${exportResponse.export_paths.spritesheet}`}
+                                download
+                                target="_blank"
+                                rel="noreferrer"
+                                className="btn-success text-center text-xs py-1.5 px-3 flex items-center justify-center gap-1.5 no-underline cursor-pointer font-bold"
+                              >
+                                <Download size={12} /> Download Spritesheet
+                              </a>
+                            )}
+                            {exportResponse.export_paths.zip && (
+                              <a 
+                                href={`http://localhost:8000${exportResponse.export_paths.zip}`}
+                                download
+                                target="_blank"
+                                rel="noreferrer"
+                                className="btn-primary text-center text-xs py-1.5 px-3 flex items-center justify-center gap-1.5 no-underline cursor-pointer font-bold"
+                              >
+                                <Download size={12} /> Download ZIP Sequence
+                              </a>
+                            )}
+                          </div>
+                          <p className="text-[9px] text-white/40 mt-1 leading-relaxed text-center font-medium">
+                            Saved to {selectedSprite.id} exports.
+                          </p>
+                        </div>
+                      )}
                     </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 bg-white/5 border border-white/5 px-2.5 py-1.5 rounded-lg">
-                    <input 
-                      type="checkbox" 
-                      id="previewChromaKey"
-                      checked={previewChromaKey}
-                      onChange={(e) => setPreviewChromaKey(e.target.checked)}
-                      className="rounded border-white/10 bg-black/40 text-indigo-600 focus:ring-0 focus:ring-offset-0 cursor-pointer w-3.5 h-3.5"
-                    />
-                    <label htmlFor="previewChromaKey" className="text-[11px] text-white/70 select-none cursor-pointer font-medium leading-none">
-                      Preview Transparency in Editor
-                    </label>
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs text-white/60">Padding around character (px)</label>
-                    <input 
-                      type="number" 
-                      min="0" 
-                      max="32" 
-                      value={exportPadding}
-                      onChange={(e) => setExportPadding(parseInt(e.target.value))}
-                      className="w-full text-xs bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-white"
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs text-white/60">Export Target Layout</label>
-                    <select 
-                      value={exportType}
-                      onChange={(e) => setExportType(e.target.value)}
-                      className="w-full text-xs bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-white"
-                    >
-                      <option value="spritesheet">Horizontal Spritesheet (Horizontal Strip)</option>
-                      <option value="sequence">Transparent PNG Sequence</option>
-                      <option value="both">Both (Sheet + Sequence)</option>
-                    </select>
-                  </div>
-
-                  <button 
-                    onClick={handleExport} 
-                    className="btn-primary w-full mt-1.5 text-xs py-2"
-                    disabled={isExporting}
-                  >
-                    {isExporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} 
-                    {isExporting ? 'Generating Transparent Canvas...' : 'Compile & Export Sprite'}
-                  </button>
+                  )}
                 </div>
-              )}
-
-              {/* Export Response Display */}
-              {exportResponse && (
-                <div className="glass-panel p-3 border-emerald-950 bg-emerald-950/10 flex flex-col gap-2 text-xs flex-shrink-0">
-                  <div className="font-semibold text-emerald-400 flex items-center gap-1.5">
-                    <CheckCircle2 size={14} /> Export Completed
-                  </div>
-                  <div className="text-[11px] text-white/60 font-mono">
-                    Dimensions: {exportResponse.dimensions.width}x{exportResponse.dimensions.height}px
-                  </div>
-                  
-                  <div className="flex flex-col gap-1.5 mt-1">
-                    {exportResponse.export_paths.spritesheet && (
-                      <a 
-                        href={`http://localhost:8000${exportResponse.export_paths.spritesheet}`}
-                        download
-                        target="_blank"
-                        rel="noreferrer"
-                        className="btn-success text-center text-xs py-1.5 px-3 flex items-center justify-center gap-1.5 no-underline cursor-pointer"
-                      >
-                        <Download size={12} /> Download Spritesheet
-                      </a>
-                    )}
-                    {exportResponse.export_paths.zip && (
-                      <a 
-                        href={`http://localhost:8000${exportResponse.export_paths.zip}`}
-                        download
-                        target="_blank"
-                        rel="noreferrer"
-                        className="btn-primary text-center text-xs py-1.5 px-3 flex items-center justify-center gap-1.5 no-underline cursor-pointer"
-                      >
-                        <Download size={12} /> Download ZIP Sequence
-                      </a>
-                    )}
-                  </div>
-                  <p className="text-[10px] text-white/40 mt-1 leading-relaxed text-center font-medium">
-                    Saved to {selectedSprite.id} exports directory.
-                  </p>
-                </div>
-              )}
-            </aside>
+              </aside>
+            )}
           </>
         ) : (
           <div className="workspace-panel items-center justify-center bg-[#04060b] text-white/30 text-sm italic">

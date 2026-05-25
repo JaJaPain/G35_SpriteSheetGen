@@ -688,3 +688,8 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .project-modal-shadow {
   box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
 }
+
+.writing-vertical {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+}
