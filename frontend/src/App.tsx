@@ -256,8 +256,27 @@ export default function App() {
     offsets: activeAttempt ? activeAttempt.offsets : selectedSpriteRaw.offsets
   } : null;
 
-  const handleFrameUpdate = (index: number, _dataUrl: string) => {
-    console.log(`Frame ${index} modified on frontend canvas.`);
+  const handleFrameUpdate = async (index: number, dataUrl: string) => {
+    if (!selectedSprite) return;
+    const activeFramesDir = viewingAttempt ? viewingAttempt.frames_dir : selectedSprite.frames_dir;
+    
+    try {
+      const params = new URLSearchParams();
+      if (selectedProject) params.append('project', selectedProject);
+      if (activeFramesDir) params.append('frames_dir', activeFramesDir);
+
+      const res = await fetch(`http://localhost:8000/api/sprite/${selectedSprite.id}/frame/${index}?${params.toString()}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_data: dataUrl })
+      });
+      
+      if (!res.ok) {
+        throw new Error('Failed to save frame');
+      }
+    } catch (e) {
+      console.error('Error saving frame updates to server:', e);
+    }
   };
 
   const handleOffsetChange = (frameIndex: number, dx: number, dy: number) => {
