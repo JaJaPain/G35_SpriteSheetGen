@@ -22,6 +22,9 @@ interface CanvasWorkspaceProps {
   wandTolerance: number;
   onFrameUpdate: (frameIndex: number, dataUrl: string) => void;
   onOffsetChange: (frameIndex: number, dx: number, dy: number) => void;
+  previewChromaKey?: boolean;
+  chromaKeyColor?: [number, number, number] | null;
+  chromaKeyTolerance?: number;
 }
 
 export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
@@ -39,6 +42,9 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
   wandTolerance,
   onFrameUpdate,
   onOffsetChange,
+  previewChromaKey = false,
+  chromaKeyColor = null,
+  chromaKeyTolerance = 20,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -58,6 +64,74 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
   
   // Loaded images cache
   const [loadedImages, setLoadedImages] = useState<Dict<HTMLImageElement>>({});
+  
+  // Real-time chroma keying cache and revision
+  const [rev, setRev] = useState<number>(0);
+  const keyedCacheRef = useRef<Dict<HTMLCanvasElement>>({});
+  
+  // Clear cache when sprite, directory, tolerance, or color changes
+  useEffect(() => {
+    keyedCacheRef.current = {};
+  }, [spriteId, framesDir, chromaKeyColor, chromaKeyTolerance]);
+
+  const getKeyedCanvas = (frameFile: string, img: HTMLImageElement): HTMLCanvasElement | HTMLImageElement => {
+    if (!previewChromaKey) return img;
+    
+    const cacheKey = `${frameFile}_${rev}`;
+    if (keyedCacheRef.current[cacheKey]) {
+      return keyedCacheRef.current[cacheKey];
+    }
+
+    // Create offscreen canvas
+    const offscreen = document.createElement('canvas');
+    offscreen.width = img.width;
+    offscreen.height = img.height;
+    const ctx = offscreen.getContext('2d');
+    if (!ctx) return img;
+
+    ctx.drawImage(img, 0, 0);
+
+    const imgData = ctx.getImageData(0, 0, offscreen.width, offscreen.height);
+    const data = imgData.data;
+
+    // Detect target background color from top-left pixel (to handle color drift across frames)
+    let rTarget = chromaKeyColor ? chromaKeyColor[0] : 0;
+    let gTarget = chromaKeyColor ? chromaKeyColor[1] : 0;
+    let bTarget = chromaKeyColor ? chromaKeyColor[2] : 0;
+
+    if (data[3] > 0) {
+      rTarget = data[0];
+      gTarget = data[1];
+      bTarget = data[2];
+    }
+    
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const a = data[i + 3];
+
+      if (a === 0) continue;
+
+      // Calculate absolute difference per channel
+      const dr = Math.abs(r - rTarget);
+      const dg = Math.abs(g - gTarget);
+      const db = Math.abs(b - bTarget);
+      const maxDiff = Math.max(dr, dg, db);
+
+      if (maxDiff < chromaKeyTolerance) {
+        data[i + 3] = 0; // Transparent
+      } else if (maxDiff < chromaKeyTolerance + 8) {
+        // Soft blending edge (8 pixels transition width, matches python backend)
+        const factor = (maxDiff - chromaKeyTolerance) / 8;
+        data[i + 3] = Math.round(a * factor);
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    keyedCacheRef.current[cacheKey] = offscreen;
+    return offscreen;
+  };
   
   const currentOffset = offsets.find(o => o.frameIndex === currentFrameIndex) || { frameIndex: currentFrameIndex, dx: 0, dy: 0 };
 
@@ -96,10 +170,25 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     });
   }, [frames, spriteId, framesDir]);
 
-  // Redraw canvas whenever frame, offsets, loaded images, zoom, or onion skins change
+  // Redraw canvas whenever frame, offsets, loaded images, zoom, onion skins, or chroma key configurations change
   useEffect(() => {
     drawCanvas();
-  }, [currentFrameIndex, loadedImages, scale, pan, offsets, onionSkinPrev, onionSkinNext, onionSkinOpacity, activeTool, selection]);
+  }, [
+    currentFrameIndex, 
+    loadedImages, 
+    scale, 
+    pan, 
+    offsets, 
+    onionSkinPrev, 
+    onionSkinNext, 
+    onionSkinOpacity, 
+    activeTool, 
+    selection,
+    previewChromaKey,
+    chromaKeyColor,
+    chromaKeyTolerance,
+    rev
+  ]);
 
   const drawCanvas = () => {
     const canvas = canvasRef.current;
@@ -122,7 +211,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
         ctx.globalAlpha = onionSkinOpacity;
         // Apply offset relative to current pan and zoom
         ctx.drawImage(
-          prevImg, 
+          getKeyedCanvas(prevFrameFile, prevImg), 
           pan.x + (prevOffset.dx * scale), 
           pan.y + (prevOffset.dy * scale), 
           prevImg.width * scale, 
@@ -139,7 +228,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
         const nextOffset = offsets.find(o => o.frameIndex === currentFrameIndex + 1) || { dx: 0, dy: 0 };
         ctx.globalAlpha = onionSkinOpacity;
         ctx.drawImage(
-          nextImg, 
+          getKeyedCanvas(nextFrameFile, nextImg), 
           pan.x + (nextOffset.dx * scale), 
           pan.y + (nextOffset.dy * scale), 
           nextImg.width * scale, 
@@ -156,7 +245,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
       ctx.save();
       // Apply offset relative to current pan and zoom
       ctx.drawImage(
-        currentImg, 
+        getKeyedCanvas(currentFrameFile, currentImg), 
         pan.x + (currentOffset.dx * scale), 
         pan.y + (currentOffset.dy * scale), 
         currentImg.width * scale, 
@@ -310,6 +399,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     // Trigger update
     const updatedDataUrl = offscreen.toDataURL('image/png');
     onFrameUpdate(currentFrameIndex, updatedDataUrl);
+    setRev(prev => prev + 1);
     
     // Update local image cache immediately to feel responsive
     const updatedImg = new Image();
@@ -397,6 +487,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     oCtx.putImageData(imgData, 0, 0);
     const updatedDataUrl = offscreen.toDataURL('image/png');
     onFrameUpdate(currentFrameIndex, updatedDataUrl);
+    setRev(prev => prev + 1);
     
     // Update local image cache immediately
     const updatedImg = new Image();
@@ -445,6 +536,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
 
     const updatedDataUrl = offscreen.toDataURL('image/png');
     onFrameUpdate(currentFrameIndex, updatedDataUrl);
+    setRev(prev => prev + 1);
 
     // Update local image cache
     const updatedImg = new Image();

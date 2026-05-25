@@ -94,6 +94,7 @@ export default function App() {
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [exportResponse, setExportResponse] = useState<any | null>(null);
   const [exportTolerance, setExportTolerance] = useState<number>(20);
+  const [previewChromaKey, setPreviewChromaKey] = useState<boolean>(true);
   const [exportPadding, setExportPadding] = useState<number>(4);
   const [exportType, setExportType] = useState<string>('spritesheet');
   
@@ -979,6 +980,9 @@ export default function App() {
                     wandTolerance={wandTolerance}
                     onFrameUpdate={handleFrameUpdate}
                     onOffsetChange={handleOffsetChange}
+                    previewChromaKey={previewChromaKey}
+                    chromaKeyColor={selectedSprite.background_rgb || null}
+                    chromaKeyTolerance={exportTolerance}
                   />
                 ) : (
                   <div className="workspace-panel items-center justify-center bg-[#04060b] text-white/50 text-center p-8 flex flex-col gap-4 w-full h-full">
@@ -1317,6 +1321,19 @@ export default function App() {
                       />
                       <span className="text-xs font-mono w-6 text-right text-indigo-300">{exportTolerance}</span>
                     </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 bg-white/5 border border-white/5 px-2.5 py-1.5 rounded-lg">
+                    <input 
+                      type="checkbox" 
+                      id="previewChromaKey"
+                      checked={previewChromaKey}
+                      onChange={(e) => setPreviewChromaKey(e.target.checked)}
+                      className="rounded border-white/10 bg-black/40 text-indigo-600 focus:ring-0 focus:ring-offset-0 cursor-pointer w-3.5 h-3.5"
+                    />
+                    <label htmlFor="previewChromaKey" className="text-[11px] text-white/70 select-none cursor-pointer font-medium leading-none">
+                      Preview Transparency in Editor
+                    </label>
                   </div>
 
                   <div className="flex flex-col gap-1.5">

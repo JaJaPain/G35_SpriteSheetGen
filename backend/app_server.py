@@ -442,8 +442,12 @@ def export_sprite(sprite_name: str, payload: ExportRequest, project: Optional[st
         frame_path = os.path.join(sprite_frames_dir, file_name)
         img_bgr = cv2.imread(frame_path)
         
+        # Sample the top-left pixel of this specific frame as its background color to handle color drift
+        pixel_bgr = img_bgr[0, 0]
+        frame_bg_rgb = [int(pixel_bgr[2]), int(pixel_bgr[1]), int(pixel_bgr[0])]
+        
         # Apply Chroma Key
-        img_transparent = apply_chroma_key(img_bgr, bg_rgb, payload.tolerance)
+        img_transparent = apply_chroma_key(img_bgr, frame_bg_rgb, payload.tolerance)
         
         # Apply offsets
         dx, dy = offsets_map.get(i, (0, 0))
