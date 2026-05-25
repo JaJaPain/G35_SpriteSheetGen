@@ -104,6 +104,35 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
       gTarget = data[1];
       bTarget = data[2];
     }
+
+    // Calculate local background variance in the top 15 rows of the frame
+    // (captures horizontal color gradient and noise across the entire width of the frame)
+    const rowsToSample = Math.min(15, img.height);
+    let localVariance = 0;
+
+    for (let y = 0; y < rowsToSample; y++) {
+      for (let x = 0; x < img.width; x++) {
+        const idx = (y * img.width + x) * 4;
+        const r = data[idx];
+        const g = data[idx + 1];
+        const b = data[idx + 2];
+        const a = data[idx + 3];
+
+        if (a === 0) continue;
+
+        const dr = Math.abs(r - rTarget);
+        const dg = Math.abs(g - gTarget);
+        const db = Math.abs(b - bTarget);
+        const diff = Math.max(dr, dg, db);
+
+        if (diff > localVariance) {
+          localVariance = diff;
+        }
+      }
+    }
+
+    // Dynamic adaptive tolerance = base tolerance + local variance
+    const adaptiveTolerance = Math.max(5, chromaKeyTolerance + localVariance);
     
     for (let i = 0; i < data.length; i += 4) {
       const r = data[i];
@@ -119,11 +148,11 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
       const db = Math.abs(b - bTarget);
       const maxDiff = Math.max(dr, dg, db);
 
-      if (maxDiff < chromaKeyTolerance) {
+      if (maxDiff < adaptiveTolerance) {
         data[i + 3] = 0; // Transparent
-      } else if (maxDiff < chromaKeyTolerance + 8) {
+      } else if (maxDiff < adaptiveTolerance + 8) {
         // Soft blending edge (8 pixels transition width, matches python backend)
-        const factor = (maxDiff - chromaKeyTolerance) / 8;
+        const factor = (maxDiff - adaptiveTolerance) / 8;
         data[i + 3] = Math.round(a * factor);
       }
     }

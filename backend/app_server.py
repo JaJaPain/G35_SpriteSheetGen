@@ -446,8 +446,22 @@ def export_sprite(sprite_name: str, payload: ExportRequest, project: Optional[st
         pixel_bgr = img_bgr[0, 0]
         frame_bg_rgb = [int(pixel_bgr[2]), int(pixel_bgr[1]), int(pixel_bgr[0])]
         
+        # Calculate local background color variance in the top 15 rows of the frame
+        # (captures horizontal color gradient and noise across the entire width of the frame)
+        h, w = img_bgr.shape[:2]
+        block_h = min(15, h)
+        top_rows = img_bgr[0:block_h, :]
+        
+        target_bgr = np.array([pixel_bgr[0], pixel_bgr[1], pixel_bgr[2]], dtype=np.int32)
+        diffs = np.abs(top_rows.astype(np.int32) - target_bgr)
+        max_diffs = np.max(diffs, axis=2)
+        local_variance = int(np.max(max_diffs))
+        
+        # Dynamic adaptive tolerance = base tolerance + local variance
+        adaptive_tolerance = max(5, payload.tolerance + local_variance)
+        
         # Apply Chroma Key
-        img_transparent = apply_chroma_key(img_bgr, frame_bg_rgb, payload.tolerance)
+        img_transparent = apply_chroma_key(img_bgr, frame_bg_rgb, adaptive_tolerance)
         
         # Apply offsets
         dx, dy = offsets_map.get(i, (0, 0))
