@@ -576,15 +576,75 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     const width = imgData.width;
     const height = imgData.height;
 
+    // Check if there are overrides for this frame to find the exact keying parameters
+    const frameOverride = offsets.find(o => o.frameIndex === currentFrameIndex);
+    const customColor = frameOverride?.override_color; // [R, G, B] or undefined
+    const customTolerance = frameOverride?.tolerance; // number or undefined
+
+    // Detect target background color from top-left pixel (matches getKeyedCanvas)
+    let rTarget = customColor ? customColor[0] : (chromaKeyColor ? chromaKeyColor[0] : 0);
+    let gTarget = customColor ? customColor[1] : (chromaKeyColor ? chromaKeyColor[1] : 0);
+    let bTarget = customColor ? customColor[2] : (chromaKeyColor ? chromaKeyColor[2] : 0);
+
+    if (!customColor && data[3] > 0) {
+      rTarget = data[0];
+      gTarget = data[1];
+      bTarget = data[2];
+    }
+
+    // Calculate local background variance in the top 15 rows of the frame
+    const rowsToSample = Math.min(15, height);
+    let localVariance = 0;
+    for (let y = 0; y < rowsToSample; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = (y * width + x) * 4;
+        const a = data[idx + 3];
+        if (a === 0) continue;
+
+        const dr = Math.abs(data[idx] - rTarget);
+        const dg = Math.abs(data[idx + 1] - gTarget);
+        const db = Math.abs(data[idx + 2] - bTarget);
+        const diff = Math.max(dr, dg, db);
+        if (diff > localVariance) {
+          localVariance = diff;
+        }
+      }
+    }
+
+    // Determine base tolerance and dynamic adaptive tolerance
+    const baseTolerance = customTolerance !== undefined ? customTolerance : chromaKeyTolerance;
+    const adaptiveTolerance = Math.max(5, baseTolerance + localVariance);
+
+    // Helper: is this pixel transparent, either by real alpha or chroma-key matching?
+    const isBackgroundPixel = (x: number, y: number): boolean => {
+      if (x < 0 || x >= width || y < 0 || y >= height) return true; // Out-of-bounds acts as background border
+      const idx = (y * width + x) * 4;
+      const r = data[idx];
+      const g = data[idx + 1];
+      const b = data[idx + 2];
+      const a = data[idx + 3];
+
+      if (a === 0) return true;
+
+      if (previewChromaKey) {
+        const dr = Math.abs(r - rTarget);
+        const dg = Math.abs(g - gTarget);
+        const db = Math.abs(b - bTarget);
+        const maxDiff = Math.max(dr, dg, db);
+        // Treat as background if it matches chroma key within tolerance
+        return maxDiff < adaptiveTolerance;
+      }
+
+      return false;
+    };
+
     // Mask boundary pixels for removal
     const toRemove = new Uint8Array(width * height);
 
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
-        const idx = (y * width + x) * 4;
-        const alpha = data[idx + 3];
-
-        if (alpha > 0) {
+        // If this is a character foreground pixel, check if it touches the background
+        if (!isBackgroundPixel(x, y)) {
           let touchesAlpha = false;
 
           // 4-way neighbors
@@ -596,12 +656,9 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
           ];
 
           for (const [nx, ny] of neighbors) {
-            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-              const nIdx = (ny * width + nx) * 4;
-              if (data[nIdx + 3] === 0) {
-                touchesAlpha = true;
-                break;
-              }
+            if (isBackgroundPixel(nx, ny)) {
+              touchesAlpha = true;
+              break;
             }
           }
 
@@ -612,7 +669,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
       }
     }
 
-    // Set alpha to 0 for marked boundary pixels
+    // Set alpha to 0 for marked boundary pixels (remove 1px edge)
     let pixelsRemovedCount = 0;
     for (let i = 0; i < toRemove.length; i++) {
       if (toRemove[i] === 1) {
@@ -632,7 +689,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     pushHistory(currentFrameFile, updatedDataUrl);
     setRev(prev => prev + 1);
 
-    // Update local image cache immediately
+    // Update local image cache immediately to feel responsive
     const updatedImg = new Image();
     updatedImg.src = updatedDataUrl;
     updatedImg.onload = () => {
