@@ -106,7 +106,7 @@ export default function App() {
   const [onionSkinOpacity, setOnionSkinOpacity] = useState<number>(0.3);
   
   // Canvas editing configurations
-  const [activeTool, setActiveTool] = useState<'pan' | 'brush' | 'eraser' | 'wand' | 'select'>('pan');
+  const [activeTool, setActiveTool] = useState<'pan' | 'halo' | 'eraser' | 'wand' | 'select'>('pan');
   const [brushSize, setBrushSize] = useState<number>(4);
   const [brushColor, setBrushColor] = useState<string>('#ffffff');
   const [wandTolerance, setWandTolerance] = useState<number>(15);

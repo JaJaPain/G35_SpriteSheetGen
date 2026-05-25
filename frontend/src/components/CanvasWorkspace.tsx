@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { ZoomIn, ZoomOut, Maximize, Undo2, Redo2, Move, Eraser, Edit, Wand2, Grid } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize, Undo2, Redo2, Move, Eraser, Wand2, Grid, Scissors } from 'lucide-react';
 
 interface OffsetItem {
   frameIndex: number;
@@ -15,8 +15,8 @@ interface CanvasWorkspaceProps {
   offsets: OffsetItem[];
   spriteId: string;
   framesDir?: string;
-  activeTool: 'brush' | 'eraser' | 'wand' | 'select' | 'pan';
-  setActiveTool: (tool: 'brush' | 'eraser' | 'wand' | 'select' | 'pan') => void;
+  activeTool: 'halo' | 'eraser' | 'wand' | 'select' | 'pan';
+  setActiveTool: (tool: 'halo' | 'eraser' | 'wand' | 'select' | 'pan') => void;
   brushSize: number;
   setBrushSize: (size: number) => void;
   brushColor: string;
@@ -44,7 +44,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
   brushSize,
   setBrushSize,
   brushColor,
-  setBrushColor,
+  setBrushColor: _setBrushColor,
   onionSkinPrev,
   onionSkinNext,
   onionSkinOpacity,
@@ -467,9 +467,11 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     const coords = getLocalCoords(e.clientX, e.clientY);
     if (!coords) return;
 
-    if (activeTool === 'brush' || activeTool === 'eraser') {
+    if (activeTool === 'eraser') {
       setIsDrawing(true);
-      drawOnFrame(coords.x, coords.y, activeTool === 'eraser');
+      drawOnFrame(coords.x, coords.y, true);
+    } else if (activeTool === 'halo') {
+      applyHaloRemover();
     } else if (activeTool === 'select') {
       setIsSelecting(true);
       setSelectStart({ x: coords.x, y: coords.y });
@@ -488,8 +490,8 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     const coords = getLocalCoords(e.clientX, e.clientY);
     if (!coords) return;
 
-    if (isDrawing && (activeTool === 'brush' || activeTool === 'eraser')) {
-      drawOnFrame(coords.x, coords.y, activeTool === 'eraser');
+    if (isDrawing && activeTool === 'eraser') {
+      drawOnFrame(coords.x, coords.y, true);
     } else if (isSelecting && activeTool === 'select') {
       const w = coords.x - selectStart.x;
       const h = coords.y - selectStart.y;
@@ -554,6 +556,92 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
         [currentFrameFile]: updatedImg
       }));
     };
+  };
+
+  // Halo Remover - finds all pixels touching alpha (transparency) and sets them to alpha = 0 (1px erosion)
+  const applyHaloRemover = () => {
+    const currentFrameFile = frames[currentFrameIndex];
+    const currentImg = loadedImages[currentFrameFile];
+    if (!currentImg) return;
+
+    const offscreen = document.createElement('canvas');
+    offscreen.width = currentImg.width;
+    offscreen.height = currentImg.height;
+    const oCtx = offscreen.getContext('2d');
+    if (!oCtx) return;
+
+    oCtx.drawImage(currentImg, 0, 0);
+    const imgData = oCtx.getImageData(0, 0, offscreen.width, offscreen.height);
+    const data = imgData.data;
+    const width = imgData.width;
+    const height = imgData.height;
+
+    // Mask boundary pixels for removal
+    const toRemove = new Uint8Array(width * height);
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = (y * width + x) * 4;
+        const alpha = data[idx + 3];
+
+        if (alpha > 0) {
+          let touchesAlpha = false;
+
+          // 4-way neighbors
+          const neighbors = [
+            [x + 1, y],
+            [x - 1, y],
+            [x, y + 1],
+            [x, y - 1]
+          ];
+
+          for (const [nx, ny] of neighbors) {
+            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+              const nIdx = (ny * width + nx) * 4;
+              if (data[nIdx + 3] === 0) {
+                touchesAlpha = true;
+                break;
+              }
+            }
+          }
+
+          if (touchesAlpha) {
+            toRemove[y * width + x] = 1;
+          }
+        }
+      }
+    }
+
+    // Set alpha to 0 for marked boundary pixels
+    let pixelsRemovedCount = 0;
+    for (let i = 0; i < toRemove.length; i++) {
+      if (toRemove[i] === 1) {
+        data[i * 4 + 3] = 0;
+        pixelsRemovedCount++;
+      }
+    }
+
+    if (pixelsRemovedCount === 0) {
+      console.log("No edge pixels touching alpha found.");
+      return;
+    }
+
+    oCtx.putImageData(imgData, 0, 0);
+    const updatedDataUrl = offscreen.toDataURL('image/png');
+    onFrameUpdate(currentFrameIndex, updatedDataUrl);
+    pushHistory(currentFrameFile, updatedDataUrl);
+    setRev(prev => prev + 1);
+
+    // Update local image cache immediately
+    const updatedImg = new Image();
+    updatedImg.src = updatedDataUrl;
+    updatedImg.onload = () => {
+      setLoadedImages(prev => ({
+        ...prev,
+        [currentFrameFile]: updatedImg
+      }));
+    };
+    console.log(`Halo Remover: Removed ${pixelsRemovedCount} boundary pixels.`);
   };
 
   // Magic Wand background keyer (flood fill)
@@ -818,10 +906,10 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
             <span className="text-[11px] text-white/40 italic">Pan mode active. Drag canvas to navigate.</span>
           )}
           
-          {(activeTool === 'brush' || activeTool === 'eraser') && (
+          {activeTool === 'eraser' && (
             <div className="flex items-center gap-4 bg-white/5 px-3 py-1 rounded-lg border border-white/5">
               <span className="text-[11px] text-white/50 uppercase tracking-wider font-semibold font-mono">
-                {activeTool === 'brush' ? 'Brush Settings' : 'Eraser Settings'}
+                Eraser Settings
               </span>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] text-white/40 font-mono">Size:</span>
@@ -835,18 +923,15 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
                 />
                 <span className="text-[11px] font-mono text-indigo-300 font-bold w-4">{brushSize}px</span>
               </div>
-              {activeTool === 'brush' && (
-                <div className="flex items-center gap-2 border-l border-white/10 pl-3 flex-row">
-                  <span className="text-[10px] text-white/40 font-mono">Color:</span>
-                  <input 
-                    type="color" 
-                    value={brushColor} 
-                    onChange={(e) => setBrushColor(e.target.value)}
-                    className="w-5 h-5 p-0 border-0 bg-transparent cursor-pointer rounded"
-                  />
-                  <span className="text-[10px] font-mono text-white/60">{brushColor.toUpperCase()}</span>
-                </div>
-              )}
+            </div>
+          )}
+
+          {activeTool === 'halo' && (
+            <div className="flex items-center gap-3 bg-white/5 px-3 py-1.5 rounded-lg border border-white/5 animate-fade-in flex-row">
+              <span className="text-[11px] text-indigo-300 uppercase tracking-wider font-semibold font-mono flex items-center gap-1.5">
+                <Scissors size={12} /> Halo Remover Active
+              </span>
+              <span className="text-[10px] text-white/50">Click anywhere on canvas to trim 1px off transparent boundaries.</span>
             </div>
           )}
           
@@ -895,11 +980,11 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
             <Move size={18} />
           </button>
           <button 
-            onClick={() => setActiveTool('brush')} 
-            className={`p-2 rounded-lg transition-all hover:bg-white/5 ${activeTool === 'brush' ? 'bg-indigo-600 hover:bg-indigo-500 text-white' : 'text-white/60 hover:text-white'}`}
-            title="Draw Brush"
+            onClick={() => setActiveTool('halo')} 
+            className={`p-2 rounded-lg transition-all hover:bg-white/5 ${activeTool === 'halo' ? 'bg-indigo-600 hover:bg-indigo-500 text-white' : 'text-white/60 hover:text-white'}`}
+            title="Halo Remover (Click Canvas)"
           >
-            <Edit size={18} />
+            <Scissors size={18} />
           </button>
           <button 
             onClick={() => setActiveTool('eraser')} 
