@@ -1274,51 +1274,53 @@ export default function App() {
                             {/* Tolerance Override */}
                             <div className="flex flex-col gap-1 bg-white/5 p-2 rounded-lg border border-white/5">
                               <div className="flex items-center justify-between">
-                                <span className="text-[11px] text-white/70">Custom Tolerance</span>
-                                <button 
-                                  onClick={() => handleUpdateFrameOverride('tolerance', hasCustomTolerance ? null : exportTolerance)}
-                                  className="text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold animate-fade-in"
-                                >
-                                  {hasCustomTolerance ? 'Reset to Global' : 'Customize'}
-                                </button>
-                              </div>
-                              {hasCustomTolerance && (
-                                <div className="flex items-center gap-2 mt-1.5">
+                                <label className="flex items-center gap-2 cursor-pointer select-none">
                                   <input 
-                                    type="range" 
-                                    min="5" 
-                                    max="80" 
-                                    value={customToleranceValue}
-                                    onChange={(e) => handleUpdateFrameOverride('tolerance', parseInt(e.target.value))}
-                                    className="flex-1 h-1.5 bg-black/40 rounded-lg appearance-none cursor-pointer"
+                                    type="checkbox" 
+                                    checked={hasCustomTolerance}
+                                    onChange={(e) => handleUpdateFrameOverride('tolerance', e.target.checked ? exportTolerance : null)}
+                                    className="rounded border-white/20 bg-black/40 text-indigo-500 focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5 cursor-pointer"
                                   />
-                                  <span className="text-[11px] font-mono text-indigo-300 w-5 text-right font-bold">{customToleranceValue}</span>
-                                </div>
-                              )}
+                                  <span className="text-[11px] font-medium text-white/80">Override Tolerance</span>
+                                </label>
+                              </div>
+                              <div className={`flex items-center gap-2 mt-1.5 transition-all duration-200 ${hasCustomTolerance ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}>
+                                <input 
+                                  type="range" 
+                                  min="5" 
+                                  max="80" 
+                                  value={customToleranceValue}
+                                  disabled={!hasCustomTolerance}
+                                  onChange={(e) => handleUpdateFrameOverride('tolerance', parseInt(e.target.value))}
+                                  className="flex-1 h-1.5 bg-black/40 rounded-lg appearance-none cursor-pointer"
+                                />
+                                <span className="text-[11px] font-mono text-indigo-300 w-5 text-right font-bold">{customToleranceValue}</span>
+                              </div>
                             </div>
 
                             {/* Color Override */}
                             <div className="flex flex-col gap-1 bg-white/5 p-2 rounded-lg border border-white/5">
                               <div className="flex items-center justify-between">
-                                <span className="text-[11px] text-white/70">Custom BG Color</span>
-                                <button 
-                                  onClick={() => handleUpdateFrameOverride('override_color', hasCustomColor ? null : customColorHex)}
-                                  className="text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold animate-fade-in"
-                                >
-                                  {hasCustomColor ? 'Reset to Auto' : 'Customize'}
-                                </button>
-                              </div>
-                              {hasCustomColor && (
-                                <div className="flex items-center gap-2 mt-1.5">
+                                <label className="flex items-center gap-2 cursor-pointer select-none">
                                   <input 
-                                    type="color" 
-                                    value={customColorHex}
-                                    onChange={(e) => handleUpdateFrameOverride('override_color', e.target.value)}
-                                    className="w-8 h-6 p-0 border-0 bg-transparent cursor-pointer rounded animate-fade-in"
+                                    type="checkbox" 
+                                    checked={hasCustomColor}
+                                    onChange={(e) => handleUpdateFrameOverride('override_color', e.target.checked ? customColorHex : null)}
+                                    className="rounded border-white/20 bg-black/40 text-indigo-500 focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5 cursor-pointer"
                                   />
-                                  <span className="text-[11px] font-mono text-white/50">{customColorHex.toUpperCase()}</span>
-                                </div>
-                              )}
+                                  <span className="text-[11px] font-medium text-white/80">Override BG Color</span>
+                                </label>
+                              </div>
+                              <div className={`flex items-center gap-2 mt-1.5 transition-all duration-200 ${hasCustomColor ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}>
+                                <input 
+                                  type="color" 
+                                  value={customColorHex}
+                                  disabled={!hasCustomColor}
+                                  onChange={(e) => handleUpdateFrameOverride('override_color', e.target.value)}
+                                  className="w-8 h-6 p-0 border-0 bg-transparent cursor-pointer rounded"
+                                />
+                                <span className="text-[11px] font-mono text-white/50">{customColorHex.toUpperCase()}</span>
+                              </div>
                             </div>
                           </div>
                         );
