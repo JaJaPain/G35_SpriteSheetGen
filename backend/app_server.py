@@ -62,6 +62,8 @@ class OffsetItem(BaseModel):
     frameIndex: int
     dx: int
     dy: int
+    tolerance: Optional[int] = None
+    override_color: Optional[List[int]] = None
 
 class OffsetSaveRequest(BaseModel):
     offsets: List[OffsetItem]
@@ -423,7 +425,7 @@ def export_sprite(sprite_name: str, payload: ExportRequest, project: Optional[st
             with open(offsets_path, 'r') as f:
                 offsets_list = json.load(f).get("offsets", [])
                 for o in offsets_list:
-                    offsets_map[o["frameIndex"]] = (o["dx"], o["dy"])
+                    offsets_map[o["frameIndex"]] = o
         except Exception as e:
             print(f"Error reading offsets: {e}")
             
@@ -442,29 +444,48 @@ def export_sprite(sprite_name: str, payload: ExportRequest, project: Optional[st
         frame_path = os.path.join(sprite_frames_dir, file_name)
         img_bgr = cv2.imread(frame_path)
         
-        # Sample the top-left pixel of this specific frame as its background color to handle color drift
-        pixel_bgr = img_bgr[0, 0]
-        frame_bg_rgb = [int(pixel_bgr[2]), int(pixel_bgr[1]), int(pixel_bgr[0])]
+        # Check if there are overrides for this frame
+        frame_override = offsets_map.get(i, {})
         
+        # Determine background color to use
+        override_color = frame_override.get("override_color") # [R, G, B]
+        if override_color:
+            frame_bg_rgb = override_color
+        else:
+            # Sample the top-left pixel
+            pixel_bgr = img_bgr[0, 0]
+            frame_bg_rgb = [int(pixel_bgr[2]), int(pixel_bgr[1]), int(pixel_bgr[0])]
+            
         # Calculate local background color variance in the top 15 rows of the frame
-        # (captures horizontal color gradient and noise across the entire width of the frame)
         h, w = img_bgr.shape[:2]
         block_h = min(15, h)
         top_rows = img_bgr[0:block_h, :]
         
-        target_bgr = np.array([pixel_bgr[0], pixel_bgr[1], pixel_bgr[2]], dtype=np.int32)
+        # target_bgr is in BGR format
+        if override_color:
+            target_bgr = np.array([override_color[2], override_color[1], override_color[0]], dtype=np.int32)
+        else:
+            pixel_bgr = img_bgr[0, 0]
+            target_bgr = np.array([pixel_bgr[0], pixel_bgr[1], pixel_bgr[2]], dtype=np.int32)
+            
         diffs = np.abs(top_rows.astype(np.int32) - target_bgr)
         max_diffs = np.max(diffs, axis=2)
         local_variance = int(np.max(max_diffs))
         
+        # Determine base tolerance
+        base_tolerance = frame_override.get("tolerance")
+        if base_tolerance is None:
+            base_tolerance = payload.tolerance
+            
         # Dynamic adaptive tolerance = base tolerance + local variance
-        adaptive_tolerance = max(5, payload.tolerance + local_variance)
+        adaptive_tolerance = max(5, base_tolerance + local_variance)
         
         # Apply Chroma Key
         img_transparent = apply_chroma_key(img_bgr, frame_bg_rgb, adaptive_tolerance)
         
         # Apply offsets
-        dx, dy = offsets_map.get(i, (0, 0))
+        dx = frame_override.get("dx", 0)
+        dy = frame_override.get("dy", 0)
         img_translated = translate_image(img_transparent, dx, dy)
         
         # Save transparent frame to export directory

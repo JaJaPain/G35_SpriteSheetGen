@@ -5,6 +5,8 @@ interface OffsetItem {
   frameIndex: number;
   dx: number;
   dy: number;
+  tolerance?: number;
+  override_color?: [number, number, number];
 }
 
 interface CanvasWorkspaceProps {
@@ -74,7 +76,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     keyedCacheRef.current = {};
   }, [spriteId, framesDir, chromaKeyColor, chromaKeyTolerance]);
 
-  const getKeyedCanvas = (frameFile: string, img: HTMLImageElement): HTMLCanvasElement | HTMLImageElement => {
+  const getKeyedCanvas = (frameFile: string, img: HTMLImageElement, frameIndex: number): HTMLCanvasElement | HTMLImageElement => {
     if (!previewChromaKey) return img;
     
     const cacheKey = `${frameFile}_${rev}`;
@@ -94,12 +96,17 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     const imgData = ctx.getImageData(0, 0, offscreen.width, offscreen.height);
     const data = imgData.data;
 
-    // Detect target background color from top-left pixel (to handle color drift across frames)
-    let rTarget = chromaKeyColor ? chromaKeyColor[0] : 0;
-    let gTarget = chromaKeyColor ? chromaKeyColor[1] : 0;
-    let bTarget = chromaKeyColor ? chromaKeyColor[2] : 0;
+    // Check if there are overrides for this frame
+    const frameOverride = offsets.find(o => o.frameIndex === frameIndex);
+    const customColor = frameOverride?.override_color; // [R, G, B] or undefined
+    const customTolerance = frameOverride?.tolerance; // number or undefined
 
-    if (data[3] > 0) {
+    // Detect target background color from top-left pixel (to handle color drift across frames)
+    let rTarget = customColor ? customColor[0] : (chromaKeyColor ? chromaKeyColor[0] : 0);
+    let gTarget = customColor ? customColor[1] : (chromaKeyColor ? chromaKeyColor[1] : 0);
+    let bTarget = customColor ? customColor[2] : (chromaKeyColor ? chromaKeyColor[2] : 0);
+
+    if (!customColor && data[3] > 0) {
       rTarget = data[0];
       gTarget = data[1];
       bTarget = data[2];
@@ -131,8 +138,11 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
       }
     }
 
+    // Determine base tolerance (frame specific or global)
+    const baseTolerance = customTolerance !== undefined ? customTolerance : chromaKeyTolerance;
+
     // Dynamic adaptive tolerance = base tolerance + local variance
-    const adaptiveTolerance = Math.max(5, chromaKeyTolerance + localVariance);
+    const adaptiveTolerance = Math.max(5, baseTolerance + localVariance);
     
     for (let i = 0; i < data.length; i += 4) {
       const r = data[i];
@@ -240,7 +250,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
         ctx.globalAlpha = onionSkinOpacity;
         // Apply offset relative to current pan and zoom
         ctx.drawImage(
-          getKeyedCanvas(prevFrameFile, prevImg), 
+          getKeyedCanvas(prevFrameFile, prevImg, currentFrameIndex - 1), 
           pan.x + (prevOffset.dx * scale), 
           pan.y + (prevOffset.dy * scale), 
           prevImg.width * scale, 
@@ -257,7 +267,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
         const nextOffset = offsets.find(o => o.frameIndex === currentFrameIndex + 1) || { dx: 0, dy: 0 };
         ctx.globalAlpha = onionSkinOpacity;
         ctx.drawImage(
-          getKeyedCanvas(nextFrameFile, nextImg), 
+          getKeyedCanvas(nextFrameFile, nextImg, currentFrameIndex + 1), 
           pan.x + (nextOffset.dx * scale), 
           pan.y + (nextOffset.dy * scale), 
           nextImg.width * scale, 
@@ -274,7 +284,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
       ctx.save();
       // Apply offset relative to current pan and zoom
       ctx.drawImage(
-        getKeyedCanvas(currentFrameFile, currentImg), 
+        getKeyedCanvas(currentFrameFile, currentImg, currentFrameIndex), 
         pan.x + (currentOffset.dx * scale), 
         pan.y + (currentOffset.dy * scale), 
         currentImg.width * scale, 

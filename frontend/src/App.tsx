@@ -11,6 +11,8 @@ interface OffsetItem {
   frameIndex: number;
   dx: number;
   dy: number;
+  tolerance?: number;
+  override_color?: [number, number, number];
 }
 
 interface RejectedAttempt {
@@ -67,6 +69,21 @@ interface SpriteData {
   good_seeds?: number[];
   rejected_seeds?: number[];
 }
+
+const rgbToHex = (rgb: number[] | null | undefined): string => {
+  if (!rgb || rgb.length < 3) return '#ffffff';
+  return '#' + rgb.slice(0, 3).map(x => {
+    const hex = Math.max(0, Math.min(255, Math.round(x))).toString(16);
+    return hex.length === 1 ? '0' + hex : hex;
+  }).join('');
+};
+
+const hexToRgb = (hex: string): [number, number, number] => {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return [r, g, b];
+};
 
 export default function App() {
   const [sprites, setSprites] = useState<SpriteData[]>([]);
@@ -253,7 +270,7 @@ export default function App() {
         const existingOffsets = [...prev.offsets];
         const offsetIdx = existingOffsets.findIndex(o => o.frameIndex === frameIndex);
         if (offsetIdx >= 0) {
-          existingOffsets[offsetIdx] = { frameIndex, dx, dy };
+          existingOffsets[offsetIdx] = { ...existingOffsets[offsetIdx], dx, dy };
         } else {
           existingOffsets.push({ frameIndex, dx, dy });
         }
@@ -269,7 +286,7 @@ export default function App() {
           const offsetIdx = existingOffsets.findIndex(o => o.frameIndex === frameIndex);
           
           if (offsetIdx >= 0) {
-            existingOffsets[offsetIdx] = { frameIndex, dx, dy };
+            existingOffsets[offsetIdx] = { ...existingOffsets[offsetIdx], dx, dy };
           } else {
             existingOffsets.push({ frameIndex, dx, dy });
           }
@@ -277,6 +294,57 @@ export default function App() {
           return {
             ...sprite,
             offsets: existingOffsets
+          };
+        })
+      );
+    }
+  };
+
+  const handleUpdateFrameOverride = (field: 'tolerance' | 'override_color', value: any) => {
+    if (!selectedSpriteId) return;
+    const frameIndex = currentFrameIndex;
+    
+    // For override_color, if value is a hex string, convert it to [R, G, B]
+    let processedValue = value;
+    if (field === 'override_color' && typeof value === 'string' && value.startsWith('#')) {
+      processedValue = hexToRgb(value);
+    }
+
+    const updateOffsetsList = (existingOffsets: any[]) => {
+      const idx = existingOffsets.findIndex(o => o.frameIndex === frameIndex);
+      if (idx >= 0) {
+        const updated = { ...existingOffsets[idx] };
+        if (processedValue === null) {
+          delete updated[field];
+        } else {
+          updated[field] = processedValue;
+        }
+        const newList = [...existingOffsets];
+        newList[idx] = updated;
+        return newList;
+      } else {
+        if (processedValue === null) return existingOffsets;
+        const newItem: any = { frameIndex, dx: 0, dy: 0 };
+        newItem[field] = processedValue;
+        return [...existingOffsets, newItem];
+      }
+    };
+
+    if (viewingAttempt) {
+      setViewingAttempt(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          offsets: updateOffsetsList(prev.offsets)
+        };
+      });
+    } else {
+      setSprites(prevSprites => 
+        prevSprites.map(sprite => {
+          if (sprite.id !== selectedSpriteId) return sprite;
+          return {
+            ...sprite,
+            offsets: updateOffsetsList(sprite.offsets)
           };
         })
       );
@@ -1155,6 +1223,76 @@ export default function App() {
                   </div>
                 </div>
               )}
+
+              {/* Frame-Specific Keying overrides (active only when frames loaded) */}
+              {activeFrames.length > 0 && (() => {
+                const currentOverride = activeOffsets.find(o => o.frameIndex === currentFrameIndex);
+                const hasCustomTolerance = currentOverride?.tolerance !== undefined;
+                const customToleranceValue = hasCustomTolerance ? currentOverride.tolerance : exportTolerance;
+                
+                const hasCustomColor = currentOverride?.override_color !== undefined;
+                const customColorHex = hasCustomColor 
+                  ? rgbToHex(currentOverride.override_color!) 
+                  : rgbToHex(selectedSprite.background_rgb || [255, 255, 255]);
+
+                return (
+                  <div className="flex flex-col gap-2.5 border-t border-white/5 pt-3 flex-shrink-0">
+                    <span className="text-[10px] font-bold text-white/40 tracking-wide uppercase">
+                      Frame {currentFrameIndex} Keying Overrides
+                    </span>
+                    
+                    {/* Tolerance Override */}
+                    <div className="flex flex-col gap-1 bg-white/5 p-2 rounded-lg border border-white/5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] text-white/70">Custom Tolerance</span>
+                        <button 
+                          onClick={() => handleUpdateFrameOverride('tolerance', hasCustomTolerance ? null : exportTolerance)}
+                          className="text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold"
+                        >
+                          {hasCustomTolerance ? 'Reset to Global' : 'Customize'}
+                        </button>
+                      </div>
+                      {hasCustomTolerance && (
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <input 
+                            type="range" 
+                            min="5" 
+                            max="80" 
+                            value={customToleranceValue}
+                            onChange={(e) => handleUpdateFrameOverride('tolerance', parseInt(e.target.value))}
+                            className="flex-1 h-1.5 bg-black/40 rounded-lg appearance-none cursor-pointer"
+                          />
+                          <span className="text-[11px] font-mono text-indigo-300 w-5 text-right font-bold">{customToleranceValue}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Color Override */}
+                    <div className="flex flex-col gap-1 bg-white/5 p-2 rounded-lg border border-white/5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] text-white/70">Custom BG Color</span>
+                        <button 
+                          onClick={() => handleUpdateFrameOverride('override_color', hasCustomColor ? null : customColorHex)}
+                          className="text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold"
+                        >
+                          {hasCustomColor ? 'Reset to Auto' : 'Customize'}
+                        </button>
+                      </div>
+                      {hasCustomColor && (
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <input 
+                            type="color" 
+                            value={customColorHex}
+                            onChange={(e) => handleUpdateFrameOverride('override_color', e.target.value)}
+                            className="w-8 h-6 p-0 border-0 bg-transparent cursor-pointer rounded animate-fade-in"
+                          />
+                          <span className="text-[11px] font-mono text-white/50">{customColorHex.toUpperCase()}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Candidates & Seed feedback loop panel */}
               {selectedSprite && (
