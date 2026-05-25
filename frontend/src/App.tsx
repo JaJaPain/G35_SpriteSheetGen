@@ -315,9 +315,27 @@ export default function App() {
             existingOffsets.push({ frameIndex, dx, dy });
           }
           
+          // Also update active attempt's offsets if activeAttempt exists
+          let updatedAttempts = sprite.attempts;
+          if (sprite.attempts && sprite.attempts.length > 0) {
+            const activeSeed = selectedAttemptSeed || sprite.seed || sprite.attempts[0].seed;
+            updatedAttempts = sprite.attempts.map(att => {
+              if (att.seed !== activeSeed) return att;
+              const attOffsets = [...att.offsets];
+              const attOffsetIdx = attOffsets.findIndex(o => o.frameIndex === frameIndex);
+              if (attOffsetIdx >= 0) {
+                attOffsets[attOffsetIdx] = { ...attOffsets[attOffsetIdx], dx, dy };
+              } else {
+                attOffsets.push({ frameIndex, dx, dy });
+              }
+              return { ...att, offsets: attOffsets };
+            });
+          }
+          
           return {
             ...sprite,
-            offsets: existingOffsets
+            offsets: existingOffsets,
+            attempts: updatedAttempts
           };
         })
       );
@@ -366,9 +384,24 @@ export default function App() {
       setSprites(prevSprites => 
         prevSprites.map(sprite => {
           if (sprite.id !== selectedSpriteId) return sprite;
+          
+          // Also update active attempt's offsets if activeAttempt exists
+          let updatedAttempts = sprite.attempts;
+          if (sprite.attempts && sprite.attempts.length > 0) {
+            const activeSeed = selectedAttemptSeed || sprite.seed || sprite.attempts[0].seed;
+            updatedAttempts = sprite.attempts.map(att => {
+              if (att.seed !== activeSeed) return att;
+              return {
+                ...att,
+                offsets: updateOffsetsList(att.offsets)
+              };
+            });
+          }
+
           return {
             ...sprite,
-            offsets: updateOffsetsList(sprite.offsets)
+            offsets: updateOffsetsList(sprite.offsets),
+            attempts: updatedAttempts
           };
         })
       );
