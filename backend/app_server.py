@@ -3,6 +3,7 @@ import sys
 import json
 import shutil
 import subprocess
+import base64
 import numpy as np
 import cv2
 from PIL import Image
@@ -344,6 +345,36 @@ def save_offsets(sprite_name: str, payload: OffsetSaveRequest, project: Optional
         return {"status": "success", "message": f"Offsets saved to {offsets_path}"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save offsets: {e}")
+
+class SaveFrameRequest(BaseModel):
+    image_data: str # Base64 data URL
+
+@app.post("/api/sprite/{sprite_name}/frame/{frame_index}")
+def save_frame(sprite_name: str, frame_index: int, payload: SaveFrameRequest, project: Optional[str] = None, frames_dir: Optional[str] = None):
+    """Save edited frame image data (Base64 PNG) back to disk."""
+    if project and frames_dir:
+        sprite_frames_dir = os.path.join(WORKSPACE_DIR, frames_dir)
+    else:
+        sprite_frames_dir = os.path.join(FRAMES_DIR, sprite_name)
+        
+    if not os.path.exists(sprite_frames_dir):
+        raise HTTPException(status_code=404, detail="Sprite frames directory not found")
+        
+    frame_files = sorted([f for f in os.listdir(sprite_frames_dir) if f.startswith("frame_") and f.endswith(".png")])
+    if frame_index < 0 or frame_index >= len(frame_files):
+        raise HTTPException(status_code=400, detail="Invalid frame index")
+        
+    frame_file_name = frame_files[frame_index]
+    frame_path = os.path.join(sprite_frames_dir, frame_file_name)
+    
+    try:
+        header, encoded = payload.image_data.split(",", 1)
+        data = base64.b64decode(encoded)
+        with open(frame_path, "wb") as f:
+            f.write(data)
+        return {"status": "success", "message": f"Frame {frame_index} saved to {frame_path}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save frame: {e}")
 
 def apply_chroma_key(img_bgr, bg_rgb, tolerance):
     """Perform chroma keying to remove background color and make it transparent."""
